@@ -1,0 +1,16 @@
+package net.sixik.ga_utils.javatogpu.runtime.opencl;
+
+public enum OpenClArgumentKind {
+    BYTE_ARRAY,
+    SHORT_ARRAY,
+    INT_ARRAY,
+    LONG_ARRAY,
+    FLOAT_ARRAY,
+    DOUBLE_ARRAY,
+    INT8,
+    INT16,
+    INT32,
+    INT64,
+    FLOAT32,
+    FLOAT64
+}

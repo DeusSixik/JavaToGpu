@@ -1,0 +1,35 @@
+plugins {
+    id 'java'
+}
+
+group = 'net.sixik.ga_utils'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+def osName = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT)
+def lwjglNatives = osName.contains("win")
+        ? "natives-windows"
+        : (osName.contains("mac") ? "natives-macos" : "natives-linux")
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation 'com.github.javaparser:javaparser-core:3.28.1'
+    implementation 'org.ow2.asm:asm:9.7.1'
+    implementation 'org.ow2.asm:asm-commons:9.7.1'
+    implementation 'org.ow2.asm:asm-tree:9.7.1'
+    implementation platform('org.lwjgl:lwjgl-bom:3.3.3')
+    implementation 'org.lwjgl:lwjgl'
+    implementation 'org.lwjgl:lwjgl-opencl'
+    runtimeOnly "org.lwjgl:lwjgl::${lwjglNatives}"
+
+    implementation files("libs/Packager-1.0-SNAPSHOT.jar")
+}
+
+test {
+    useJUnitPlatform()
+}

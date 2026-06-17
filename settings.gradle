@@ -1,0 +1,3 @@
+rootProject.name = 'JavaToGpu'
+include 'test-app'
+include 'processor'

@@ -1,0 +1,99 @@
+package net.sixik.ga_utils.javatogpu.runtime;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+
+public final class GpuGeneratedLauncherInvoker {
+
+    private GpuGeneratedLauncherInvoker() {
+    }
+
+    public static Object invoke(Class<?> ownerClass, String methodName, Object... arguments) {
+        try {
+            Class<?> launcherClass = Class.forName(GpuLauncherNaming.launcherClassName(ownerClass, methodName), true, ownerClass.getClassLoader());
+            Method invokeMethod = Arrays.stream(launcherClass.getMethods())
+                    .filter(method -> method.getName().equals("invoke"))
+                    .filter(method -> Modifier.isStatic(method.getModifiers()))
+                    .filter(method -> parametersMatch(method.getParameterTypes(), arguments))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "No generated GPU launcher invoke(...) overload matches "
+                                    + ownerClass.getName()
+                                    + "#"
+                                    + methodName
+                    ));
+            return invokeMethod.invoke(null, arguments);
+        } catch (ClassNotFoundException exception) {
+            throw new IllegalArgumentException(
+                    "Generated GPU launcher not found for "
+                            + ownerClass.getName()
+                            + "#"
+                            + methodName
+                            + " at "
+                            + GpuLauncherNaming.launcherClassName(ownerClass, methodName),
+                    exception
+            );
+        } catch (IllegalAccessException exception) {
+            throw new IllegalStateException(
+                    "Generated GPU launcher invoke(...) is not accessible for "
+                            + ownerClass.getName()
+                            + "#"
+                            + methodName,
+                    exception
+            );
+        } catch (InvocationTargetException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new RuntimeException(
+                    "Generated GPU launcher invocation failed for "
+                            + ownerClass.getName()
+                            + "#"
+                            + methodName,
+                    cause
+            );
+        }
+    }
+
+    private static boolean parametersMatch(Class<?>[] parameterTypes, Object[] arguments) {
+        if (parameterTypes.length != arguments.length) {
+            return false;
+        }
+
+        for (int i = 0; i < parameterTypes.length; i++) {
+            if (!parameterMatches(parameterTypes[i], arguments[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static boolean parameterMatches(Class<?> parameterType, Object argument) {
+        if (argument == null) {
+            return !parameterType.isPrimitive();
+        }
+
+        if (parameterType.isPrimitive()) {
+            return switch (parameterType.getName()) {
+                case "boolean" -> argument instanceof Boolean;
+                case "byte" -> argument instanceof Byte;
+                case "short" -> argument instanceof Short;
+                case "int" -> argument instanceof Integer;
+                case "long" -> argument instanceof Long;
+                case "float" -> argument instanceof Float;
+                case "double" -> argument instanceof Double;
+                case "char" -> argument instanceof Character;
+                default -> false;
+            };
+        }
+
+        return parameterType.isInstance(argument);
+    }
+}

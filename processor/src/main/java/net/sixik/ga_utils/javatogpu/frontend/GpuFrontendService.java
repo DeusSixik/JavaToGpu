@@ -1,0 +1,56 @@
+package net.sixik.ga_utils.javatogpu.frontend;
+
+import net.sixik.ga_utils.javatogpu.frontend.opencl.OpenClKernelEmitter;
+import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
+import net.sixik.ga_utils.javatogpu.frontend.ir.model.GpuIrMethod;
+import net.sixik.ga_utils.javatogpu.frontend.lowering.GpuIrLowerer;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
+import net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser;
+import net.sixik.ga_utils.javatogpu.frontend.validation.GpuSubsetValidator;
+
+public final class GpuFrontendService {
+
+    private final GpuMethodParser parser;
+    private final GpuSubsetValidator validator;
+    private final GpuIrLowerer lowerer;
+    private final OpenClKernelEmitter emitter;
+
+    public GpuFrontendService(
+            GpuMethodParser parser,
+            GpuSubsetValidator validator,
+            GpuIrLowerer lowerer,
+            OpenClKernelEmitter emitter
+    ) {
+        this.parser = parser;
+        this.validator = validator;
+        this.lowerer = lowerer;
+        this.emitter = emitter;
+    }
+
+    public static GpuFrontendService createDefault() {
+        GpuIntrinsicDatabase intrinsicDatabase = GpuIntrinsicDatabase.createDefault();
+        return new GpuFrontendService(
+                new GpuMethodParser(),
+                new GpuSubsetValidator(intrinsicDatabase),
+                new GpuIrLowerer(intrinsicDatabase),
+                new OpenClKernelEmitter()
+        );
+    }
+
+    public ParsedGpuMethod parseAndValidate(String methodSource) {
+        ParsedGpuMethod method = parser.parseMethod(methodSource);
+        validator.validate(method);
+        return method;
+    }
+
+    public GpuIrMethod parseValidateAndLower(String methodSource) {
+        ParsedGpuMethod method = parseAndValidate(methodSource);
+        return lowerer.lower(method);
+    }
+
+    public String parseValidateLowerAndEmit(String methodSource) {
+        ParsedGpuMethod method = parseAndValidate(methodSource);
+        GpuIrMethod irMethod = lowerer.lower(method);
+        return emitter.emit(method, irMethod);
+    }
+}

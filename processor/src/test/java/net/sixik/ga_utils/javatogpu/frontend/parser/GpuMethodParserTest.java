@@ -55,4 +55,19 @@ class GpuMethodParserTest {
         assertEquals("float", method.returnType());
         assertTrue(method.inline());
     }
+
+    @Test
+    void parsesNativeCCodeBodyMetadata() {
+        String methodSource = "@CCode(code = \"\"\"\n"
+                + "        return (*a) + (*b) * 50.0f;\n"
+                + "        \"\"\")\n"
+                + "native float myMath(FloatPtr a, FloatPtr b);";
+
+        GpuMethodParser parser = new GpuMethodParser();
+        ParsedGpuMethod method = parser.parseMethod(methodSource, "Helpers", "sample.Helpers");
+
+        assertTrue(method.nativeDeclaration());
+        assertEquals("return (*a) + (*b) * 50.0f;\n", method.nativeCode());
+        assertEquals("myMath", method.name());
+    }
 }

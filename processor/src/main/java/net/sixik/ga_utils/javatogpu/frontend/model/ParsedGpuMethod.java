@@ -12,6 +12,8 @@ public record ParsedGpuMethod(
         List<ParsedGpuParameter> parameters,
         List<ParsedGpuConstant> constants,
         MethodDeclaration declaration,
-        boolean inline
+        boolean inline,
+        String nativeCode,
+        boolean nativeDeclaration
 ) {
 }

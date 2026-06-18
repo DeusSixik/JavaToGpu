@@ -79,10 +79,14 @@ public class Main {
             return a + b + t;
         }
 
-        @CCode
-        public static void my_code(DoublePtr ptr) {
-            ptr.value = 50;
-        }
+        @CCode(code = """
+                (*ptr) = 50;
+                
+                for(int i = 0; i < 20; i++) {
+                    (*ptr) *= (i ^ 2 + 15) * 0.5f;
+                }
+                """)
+        public static native void my_code(DoublePtr ptr);
 
         @CCode(inline = true)
         public static double aditionalCode(DoublePtr ptr, double value) {

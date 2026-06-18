@@ -33,6 +33,7 @@ import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
+import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuBuiltinConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.GpuAddressSpace;
@@ -115,9 +116,45 @@ public final class GpuSubsetValidator {
 
         validateReturnType(method, issues, kernelEntry);
         validateParameters(method, issues, kernelEntry);
-        method.declaration().getBody().ifPresentOrElse(
-                body -> body.getStatements().forEach(statement -> validateStatement(statement, issues, scopes, context)),
-                () -> issues.add(issue(method.declaration(), "GPU method must have a body"))
+        validateMethodBody(method, issues, scopes, context);
+    }
+
+    private void validateMethodBody(
+            ParsedGpuMethod method,
+            List<GpuValidationIssue> issues,
+            Deque<Map<String, String>> scopes,
+            ValidationContext context
+    ) {
+        boolean hasBody = method.declaration().getBody().isPresent();
+        boolean hasNativeCode = !method.nativeCode().isBlank();
+
+        if (context.kernelEntry()) {
+            if (hasNativeCode) {
+                issues.add(issue(method.declaration(), "@GPU methods cannot use @CCode(code = \"...\")"));
+            }
+            if (!hasBody) {
+                issues.add(issue(method.declaration(), "GPU method must have a body"));
+                return;
+            }
+        } else {
+            if (hasBody && hasNativeCode) {
+                issues.add(issue(method.declaration(), "@CCode helpers must use either a Java body or code = \"...\", not both"));
+                return;
+            }
+            if (!hasBody && !hasNativeCode) {
+                String message = method.nativeDeclaration()
+                        ? "Native @CCode helper must define code = \"...\""
+                        : "@CCode helper must have a body or define code = \"...\"";
+                issues.add(issue(method.declaration(), message));
+                return;
+            }
+            if (hasNativeCode) {
+                return;
+            }
+        }
+
+        method.declaration().getBody().ifPresent(body ->
+                body.getStatements().forEach(statement -> validateStatement(statement, issues, scopes, context))
         );
     }
 
@@ -1142,6 +1179,24 @@ public final class GpuSubsetValidator {
                         constant.sourceText()
                 ));
             }
+        }
+        for (GpuBuiltinConstant constant : intrinsicDatabase.builtinConstants()) {
+            List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+            boolean alreadyPresent = constants.stream().anyMatch(existing ->
+                    sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName())
+                            && existing.javaType().equals(constant.javaType())
+                            && existing.sourceText().equals(constant.sourceText())
+            );
+            if (alreadyPresent) {
+                continue;
+            }
+            constants.add(new ConstantDescriptor(
+                    constant.ownerSimpleName(),
+                    constant.ownerQualifiedName(),
+                    constant.name(),
+                    constant.javaType(),
+                    constant.sourceText()
+            ));
         }
         return constantRegistry;
     }

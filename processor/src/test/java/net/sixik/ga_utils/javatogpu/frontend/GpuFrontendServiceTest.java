@@ -449,6 +449,53 @@ class GpuFrontendServiceTest {
     }
 
     @Test
+    void parsesValidatesLowersAndEmitsNativeCCodeHelpers() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    FloatPtr ptr = new FloatPtr();
+                    ptr.value = input[id];
+                    output[id] = Helpers.myMath(input[id], 2.0f) + Helpers.myMathPtr(ptr, ptr);
+                }
+                """;
+        String scalarHelperSource = "@CCode(code = \"\"\"\n"
+                + "        return a + b * 50.0f;\n"
+                + "        \"\"\")\n"
+                + "native float myMath(float a, float b);";
+        String pointerHelperSource = "@CCode(code = \"\"\"\n"
+                + "        return (*a) + (*b) * 50.0f;\n"
+                + "        \"\"\")\n"
+                + "native float myMathPtr(FloatPtr a, FloatPtr b);";
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser parser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        ParsedGpuMethod kernelMethod = parser.parseMethod(methodSource, "Demo", "sample.Demo");
+        ParsedGpuMethod scalarHelperMethod = parser.parseMethod(scalarHelperSource, "Helpers", "sample.Helpers");
+        ParsedGpuMethod pointerHelperMethod = parser.parseMethod(pointerHelperSource, "Helpers", "sample.Helpers");
+
+        String kernel = service.validateLowerAndEmit(kernelMethod, List.of(scalarHelperMethod, pointerHelperMethod));
+
+        assertEquals("""
+                float jtg_fn_Helpers_myMath_float_float(float a, float b);
+                float jtg_fn_Helpers_myMathPtr_FloatPtr_FloatPtr(float* a, float* b);
+
+                float jtg_fn_Helpers_myMath_float_float(float a, float b) {
+                    return a + b * 50.0f;
+                }
+                float jtg_fn_Helpers_myMathPtr_FloatPtr_FloatPtr(float* a, float* b) {
+                    return (*a) + (*b) * 50.0f;
+                }
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    float ptr = 0.0f;
+                    ptr = input[id];
+                    output[id] = (jtg_fn_Helpers_myMath_float_float(input[id], 2.0f) + jtg_fn_Helpers_myMathPtr_FloatPtr_FloatPtr((&ptr), (&ptr)));
+                }""", kernel);
+    }
+
+    @Test
     void parsesValidatesLowersAndEmitsHelperCallWithScalarWidening() {
         String methodSource = """
                 @GPU
@@ -712,6 +759,60 @@ class GpuFrontendServiceTest {
                     int id = get_global_id(0);
                     double value = (sqrt(input[id]) + pow(input[id], 2.0));
                     output[id] = max(value, log(input[id]));
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsWorkItemAndBarrierBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int gid = GPU.get_global_id(0);
+                    int lid = GPU.get_local_id(0);
+                    int size = GPU.get_global_size(0);
+                    int dim = GPU.get_work_dim();
+                    GPU.barrier(GPU.CLK_LOCAL_MEM_FENCE | GPU.CLK_GLOBAL_MEM_FENCE);
+                    output[gid] = gid + lid + size + dim;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int gid = get_global_id(0);
+                    int lid = get_local_id(0);
+                    int size = get_global_size(0);
+                    int dim = get_work_dim();
+                    barrier((1 | 2));
+                    output[gid] = (((gid + lid) + size) + dim);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsOpenClCommonMathBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = GPU.clamp(input[id], 0.0f, 1.0f);
+                    output[id] = GPU.mix(output[id], GPU.rsqrt(GPU.fmax(input[id], 1.0f)), 0.5f);
+                    output[id] = GPU.mad(output[id], GPU.step(0.25f, output[id]), GPU.smoothstep(0.0f, 1.0f, output[id]));
+                    output[id] = GPU.log2(GPU.length(output[id], 2.0f));
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    output[id] = clamp(input[id], 0.0f, 1.0f);
+                    output[id] = mix(output[id], rsqrt(fmax(input[id], 1.0f)), 0.5f);
+                    output[id] = mad(output[id], step(0.25f, output[id]), smoothstep(0.0f, 1.0f, output[id]));
+                    output[id] = log2(hypot(output[id], 2.0f));
                 }""", kernel);
     }
 

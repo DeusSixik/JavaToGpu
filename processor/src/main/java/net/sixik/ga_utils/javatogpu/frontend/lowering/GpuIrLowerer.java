@@ -32,6 +32,7 @@ import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsic;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
+import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuBuiltinConstant;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrArrayAccess;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrBinary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrCast;
@@ -151,8 +152,14 @@ public final class GpuIrLowerer {
         );
 
         List<GpuIrStatement> statements = new ArrayList<>();
-        method.declaration().getBody()
-                .orElseThrow(() -> new IllegalArgumentException("GPU method must have a body"))
+        if (method.declaration().getBody().isEmpty()) {
+            if (method.nativeCode().isBlank()) {
+                throw new IllegalArgumentException("GPU method must have a body");
+            }
+            return new GpuIrMethod(method.name(), List.of());
+        }
+
+        method.declaration().getBody().orElseThrow()
                 .getStatements()
                 .forEach(statement -> statements.add(lowerStatement(statement, scopes, context)));
 
@@ -808,6 +815,24 @@ public final class GpuIrLowerer {
                         constant.sourceText()
                 ));
             }
+        }
+        for (GpuBuiltinConstant constant : intrinsicDatabase.builtinConstants()) {
+            List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+            boolean alreadyPresent = constants.stream().anyMatch(existing ->
+                    sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName())
+                            && existing.javaType().equals(constant.javaType())
+                            && existing.sourceText().equals(constant.sourceText())
+            );
+            if (alreadyPresent) {
+                continue;
+            }
+            constants.add(new ConstantDescriptor(
+                    constant.ownerSimpleName(),
+                    constant.ownerQualifiedName(),
+                    constant.name(),
+                    constant.javaType(),
+                    constant.sourceText()
+            ));
         }
         return constantRegistry;
     }

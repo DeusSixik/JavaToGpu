@@ -315,11 +315,26 @@ public final class OpenClKernelEmitter {
                 .append(parsedMethod.parameters().stream().map(this::emitParameter).collect(Collectors.joining(", ")))
                 .append(") {\n");
 
-        for (GpuIrStatement statement : irMethod.statements()) {
-            emitStatement(builder, statement, 1);
+        if (!kernel && !parsedMethod.nativeCode().isBlank()) {
+            emitNativeCode(builder, parsedMethod.nativeCode(), 1);
+        } else {
+            for (GpuIrStatement statement : irMethod.statements()) {
+                emitStatement(builder, statement, 1);
+            }
         }
 
         builder.append("}");
+    }
+
+    private void emitNativeCode(StringBuilder builder, String nativeCode, int indent) {
+        String prefix = "    ".repeat(indent);
+        String normalized = nativeCode.strip();
+        if (normalized.isEmpty()) {
+            return;
+        }
+        for (String line : normalized.split("\\R", -1)) {
+            builder.append(prefix).append(line).append("\n");
+        }
     }
 
     private void emitFunctionPrototype(StringBuilder builder, ParsedGpuMethod parsedMethod, String emittedName) {

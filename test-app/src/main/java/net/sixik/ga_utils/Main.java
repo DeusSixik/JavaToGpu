@@ -1,6 +1,6 @@
 package net.sixik.ga_utils;
 
-import net.sixik.ga_utils.javatogpu.api.DoublePtr;
+import net.sixik.ga_utils.javatogpu.api.Float2;
 import net.sixik.ga_utils.javatogpu.api.FloatPtr;
 import net.sixik.ga_utils.javatogpu.api.GPU;
 import net.sixik.ga_utils.javatogpu.api.anotations.CCode;
@@ -9,20 +9,33 @@ import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
 import net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackend;
 
-public class Main {
-    public static void main(String[] args) {
-        double[] in = new double[256];
-        double[] out = new double[256];
+public final class Main {
 
-        for (int i = 0; i < in.length; i++) {
-            in[i] = 1 + (i ^ 2) * .5f;
-        }
+    private Main() {
+    }
+
+    public static void main(String[] args) {
+        float[] floatInput = new float[]{1.0f, 2.0f, 3.0f, 4.0f};
+        float[] basicOutput = new float[floatInput.length];
+        float[] vectorOutput = new float[floatInput.length];
+
+        double[] doubleInput = new double[]{1.0, 2.0, 3.0, 4.0};
+        double[] structOutput = new double[doubleInput.length];
 
         try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
             GpuRuntime.setBackend(backend);
-            System.out.println("Invoking @GPU method directly...");
-            GpuTest.my_gpu_code(in, out);
-            System.out.println("GPU result: " + out[0]);
+
+            System.out.println("Running basic @GPU example...");
+            Examples.basicMath(floatInput, basicOutput);
+            System.out.println("basicOutput[0] = " + basicOutput[0]);
+
+            System.out.println("Running @GPUStruct example...");
+            Examples.structExample(doubleInput, structOutput);
+            System.out.println("structOutput[0] = " + structOutput[0]);
+
+            System.out.println("Running vector example...");
+            Examples.vectorExample(floatInput, vectorOutput);
+            System.out.println("vectorOutput[0] = " + vectorOutput[0]);
         } catch (RuntimeException exception) {
             System.out.println("GPU execution failed: " + exception.getMessage());
         } finally {
@@ -30,112 +43,111 @@ public class Main {
         }
     }
 
-    public static class GpuTest {
+    public static final class Examples {
+
+        private Examples() {
+        }
 
         @net.sixik.ga_utils.javatogpu.api.anotations.GPU
-        public static void my_gpu_code(
+        public static void basicMath(
+                @GPUGlobal float[] input,
+                @GPUGlobal float[] output
+        ) {
+            int id = GPU.get_global_id(0);
+            FloatPtr ptr = new FloatPtr(input[id]);
+
+            KernelMath.clamp(ptr);
+            output[id] = KernelMath.lerp(ptr.value, GPU.sin(input[id]), 0.25f);
+        }
+
+        @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+        public static void structExample(
                 @GPUGlobal double[] input,
                 @GPUGlobal double[] output
         ) {
             int id = GPU.get_global_id(0);
-            double value = input[id];
 
-            DoublePtr ptr = new DoublePtr();
-            GpuUtils.my_code(ptr);
+            SamplePoint point = new SamplePoint(input[id], input[id] * 2.0);
+            SampleData sample = new SampleData(point, 0.5, id);
 
-            for (int i = 0; i < 50; i++) {
-                value *= input[id] + 5 * GpuUtils.c_code(i * 0.75f, 10, i);
+            output[id] = sample.point.x + sample.point.y + sample.bias + sample.index;
+        }
 
-                for (int j = 0; j < 150; j++) {
-                    value += j;
+        @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+        public static void vectorExample(
+                @GPUGlobal float[] input,
+                @GPUGlobal float[] output
+        ) {
+            int id = GPU.get_global_id(0);
 
-                    for (int k = 0; k < i * j; k++) {
-                        value += k * 0.1f;
-                    }
-                }
-            }
+            Float2 left = new Float2(input[id], input[id] * 2.0f);
+            Float2 right = new Float2(1.0f);
+            Float2 sum = VectorMath.add(left, right);
 
-            if(value > 20) {
-                value = 50 * (value / 50);
-            }
-
-            int index = value < 20 ? 1 : 0;
-            switch (index) {
-                case 1: {
-                    value = 17 * (1 / value);
-                }
-                default:
-                    break;
-            }
-
-            ptr.value = input[id];
-
-            // Correct @GPUStruct usage:
-            // use scalar fields or other @GPUStruct types, then construct them with normal Java constructors.
-            TestVec2 point = new TestVec2(value, input[id]);
-            TestStruct sample = new TestStruct(point, 20.5, 10);
-
-            output[id] =
-                            GPU.sin(GpuUtils.c_code(value, value * 2, 0.15f))
-                                    * GPU.tan(GpuUtils.aditionalCode(ptr, value))
-                            + sample.bias
-                            + sample.point.x
-                            + sample.point.y
-                            + sample.count;
+            output[id] = sum.x + sum.y;
         }
     }
 
-    public static class GpuUtils {
+    public static final class KernelMath {
 
-        @CCode
-        public static double c_code(double a, double b, double t) {
-            return a + b + t;
+        private static final float LIMIT = 32.0f;
+
+        private KernelMath() {
         }
 
-        @CCode(code = """
-                (*ptr) = 50;
-                
-                for(int i = 0; i < 20; i++) {
-                    (*ptr) *= (i ^ 2 + 15) * 0.5f;
-                }
-                """)
-        public static native void my_code(DoublePtr ptr);
+        @CCode
+        public static void clamp(FloatPtr ptr) {
+            if (ptr.value > LIMIT) {
+                ptr.value = LIMIT;
+            }
+        }
 
         @CCode(inline = true)
-        public static double aditionalCode(DoublePtr ptr, double value) {
-            return (ptr.value * ptr.value * 0.5f) + value * ptr.value;
+        public static float lerp(float a, float b, float t) {
+            return a + (b - a) * t;
+        }
+    }
+
+    public static final class VectorMath {
+
+        private VectorMath() {
+        }
+
+        @CCode
+        public static Float2 add(Float2 left, Float2 right) {
+            return new Float2(left.x + right.x, left.y + right.y);
         }
     }
 
     @GPUStruct
-    public static class TestVec2 {
+    public static final class SamplePoint {
 
         public double x;
         public double y;
 
-        public TestVec2() {
+        public SamplePoint() {
         }
 
-        public TestVec2(double x, double y) {
+        public SamplePoint(double x, double y) {
             this.x = x;
             this.y = y;
         }
     }
 
     @GPUStruct
-    public static class TestStruct {
+    public static final class SampleData {
 
-        public TestVec2 point;
+        public SamplePoint point;
         public double bias;
-        public int count;
+        public int index;
 
-        public TestStruct() {
+        public SampleData() {
         }
 
-        public TestStruct(TestVec2 point, double bias, int count) {
+        public SampleData(SamplePoint point, double bias, int index) {
             this.point = point;
             this.bias = bias;
-            this.count = count;
+            this.index = index;
         }
     }
 }

@@ -2359,6 +2359,77 @@ class GpuCompilerProcessorTest {
     }
 
     @Test
+    void generatesKernelWithStructArrayKernelParameter() throws IOException {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path classOutputDir = Files.createTempDirectory("javatogpu-struct-array-classes");
+        Path generatedOutputDir = Files.createTempDirectory("javatogpu-struct-array-generated");
+
+        String source = """
+                package sample;
+
+                import net.sixik.ga_utils.javatogpu.api.GPU;
+                import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+                import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
+
+                @GPUStruct
+                class Sample {
+                    float x;
+                    float y;
+                }
+
+                public class Demo {
+                    @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+                    static void kernel(@GPUGlobal Sample[] input, @GPUGlobal Sample[] output) {
+                        int id = GPU.get_global_id(0);
+                        output[id].x = input[id].x + 1.0f;
+                        output[id].y = input[id].y + 2.0f;
+                    }
+                }
+                """;
+
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
+            List<String> options = List.of(
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-d", classOutputDir.toString(),
+                    "-s", generatedOutputDir.toString()
+            );
+            JavaFileObject sourceFile = new StringJavaFileObject("sample.Demo", source);
+            JavaCompiler.CompilationTask task = compiler.getTask(
+                    null,
+                    fileManager,
+                    null,
+                    options,
+                    null,
+                    List.of(sourceFile)
+            );
+            task.setProcessors(List.of(new GpuCompilerProcessor()));
+
+            assertTrue(task.call());
+        }
+
+        Path kernelPath = generatedOutputDir.resolve("javatogpu/sample/Demo/kernel.cl");
+        assertTrue(Files.exists(kernelPath));
+        assertEquals("""
+                typedef struct{
+                    float x;
+                    float y;
+                } Sample;
+
+                __kernel void jtg_kernel(__global Sample* input, __global Sample* output) {
+                    int id = get_global_id(0);
+                    output[id].x = (input[id].x + 1.0F);
+                    output[id].y = (input[id].y + 2.0F);
+                }""", Files.readString(kernelPath));
+
+        Path launcherSourcePath = generatedOutputDir.resolve("sample/generated/Demo_kernel_GpuLauncher.java");
+        assertTrue(Files.exists(launcherSourcePath));
+        String launcherSource = Files.readString(launcherSourcePath);
+        assertTrue(launcherSource.contains("new net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor(\"input\", \"sample.Sample[]\", net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess.READ_WRITE)"));
+        assertTrue(launcherSource.contains("new net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor(\"output\", \"sample.Sample[]\", net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess.READ_WRITE)"));
+        assertTrue(launcherSource.contains("public static void invoke(java.lang.Object[] input, java.lang.Object[] output)"));
+    }
+
+    @Test
     void generatesKernelWithWhileDoWhileAndSwitch() throws IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         Path classOutputDir = Files.createTempDirectory("javatogpu-controlflow-classes");
@@ -2602,7 +2673,7 @@ class GpuCompilerProcessorTest {
         assertTrue(
                 diagnostics.getDiagnostics().stream().anyMatch(diagnostic ->
                         String.valueOf(diagnostic.getMessage(null)).contains(
-                                "Primitive array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: float[]"
+                                "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: float[]"
                         )
                 )
         );

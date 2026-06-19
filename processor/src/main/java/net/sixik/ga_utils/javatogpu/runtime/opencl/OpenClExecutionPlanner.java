@@ -24,7 +24,7 @@ public final class OpenClExecutionPlanner {
                             arrayArgument.kind(),
                             arrayArgument.sourceArray(),
                             arrayArgument.length(),
-                            bytesFor(arrayArgument.kind(), arrayArgument.length())
+                            bytesFor(arrayArgument.kind(), arrayArgument.sourceArray(), arrayArgument.length())
                     );
                     localBindings.add(binding);
                     argumentBindings.add(OpenClPlannedArgumentBinding.forLocal(index, binding));
@@ -66,7 +66,7 @@ public final class OpenClExecutionPlanner {
         );
     }
 
-    private static long bytesFor(OpenClArgumentKind kind, int length) {
+    private static long bytesFor(OpenClArgumentKind kind, Object sourceArray, int length) {
         return switch (kind) {
             case BYTE_ARRAY -> length;
             case SHORT_ARRAY -> (long) length * Short.BYTES;
@@ -74,6 +74,7 @@ public final class OpenClExecutionPlanner {
             case LONG_ARRAY -> (long) length * Long.BYTES;
             case FLOAT_ARRAY -> (long) length * Float.BYTES;
             case DOUBLE_ARRAY -> (long) length * Double.BYTES;
+            case STRUCT_ARRAY -> OpenClValuePacker.structArrayByteSize(sourceArray);
             default -> throw new IllegalArgumentException("Unsupported OpenCL local argument kind: " + kind);
         };
     }

@@ -37,6 +37,14 @@ public final class OpenClArgumentMarshaller {
                     OpenClValuePacker.packVector(parameterDescriptor.javaType(), argument)
             );
         }
+        if (OpenClValuePacker.isStructArrayInstance(argument)) {
+            return new OpenClArrayArgument(
+                    OpenClArgumentKind.STRUCT_ARRAY,
+                    access,
+                    argument,
+                    java.lang.reflect.Array.getLength(argument)
+            );
+        }
         if (OpenClValuePacker.isStructInstance(argument)) {
             return new OpenClScalarArgument(
                     OpenClArgumentKind.PACKED_VALUE,

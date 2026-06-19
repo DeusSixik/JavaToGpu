@@ -153,6 +153,27 @@ class OpenClExecutionPlannerTest {
         assertEquals(OpenClArgumentKind.PACKED_VALUE, plan.scalarBindings().get(0).kind());
     }
 
+    @Test
+    void buildsExecutionPlanForStructArrayArguments() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("samples", "sample.Sample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(
+                OpenClArgumentMarshaller.marshall(descriptor, new Object[]{new Sample[]{new Sample(2.0f, 3.0f)}})
+        );
+
+        assertEquals(1, plan.bufferBindings().size());
+        assertEquals(OpenClArgumentKind.STRUCT_ARRAY, plan.bufferBindings().get(0).kind());
+        assertEquals(1, plan.bufferBindings().get(0).length());
+        assertEquals(GpuKernelParameterAccess.READ_WRITE, plan.bufferBindings().get(0).access());
+    }
+
     @GPUStruct
     static final class Sample {
         float x;

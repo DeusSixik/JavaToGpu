@@ -199,6 +199,45 @@ class OpenClGpuRuntimeBackendIntegrationTest {
         assertArrayEquals(new float[]{6.75f, 7.75f, 8.75f, 9.75f}, output);
     }
 
+    @Test
+    void runsStructArrayKernelOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "gpu_struct_array_entry",
+                "inline://integration/struct-array-kernel.cl",
+                """
+                        typedef struct{
+                            float x;
+                            float y;
+                        } StructArraySample;
+
+                        __kernel void gpu_struct_array_entry(__global StructArraySample* input, __global StructArraySample* output) {
+                            int id = get_global_id(0);
+                            output[id].x = input[id].x + 1.0f;
+                            output[id].y = input[id].y + 2.0f;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "sample.StructArraySample[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "sample.StructArraySample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(descriptor, "Skipping struct array integration smoke test");
+
+        StructArraySample[] input = new StructArraySample[]{
+                new StructArraySample(1.0f, 2.0f),
+                new StructArraySample(3.0f, 4.0f)
+        };
+        StructArraySample[] output = new StructArraySample[]{new StructArraySample(), new StructArraySample()};
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+            backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{input, output}));
+        }
+
+        assertArrayEquals(new float[]{2.0f, 4.0f}, new float[]{output[0].x, output[1].x});
+        assertArrayEquals(new float[]{4.0f, 6.0f}, new float[]{output[0].y, output[1].y});
+    }
+
     @GPUStruct
     @OpenCLAttributes({"packed"})
     static final class Sample {
@@ -211,6 +250,20 @@ class OpenClGpuRuntimeBackendIntegrationTest {
             this.x = x;
             this.y = y;
             this.count = count;
+        }
+    }
+
+    @GPUStruct
+    static final class StructArraySample {
+        float x;
+        float y;
+
+        StructArraySample() {
+        }
+
+        StructArraySample(float x, float y) {
+            this.x = x;
+            this.y = y;
         }
     }
 

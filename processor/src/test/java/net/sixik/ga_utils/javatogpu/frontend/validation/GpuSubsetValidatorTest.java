@@ -426,6 +426,30 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
+    void acceptsStructArrayKernelParameters() {
+        String structSource = """
+                @GPUStruct
+                class Sample {
+                    float x;
+                    float y;
+                }
+                """;
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal Sample[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = input[id].x + input[id].y;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(methodSource, "Demo", "sample.Demo"),
+                java.util.List.of(),
+                java.util.List.of(structParser.parseStruct(structSource, "Sample", "sample.Sample"))
+        ));
+    }
+
+    @Test
     void acceptsBooleanLocalsAndLiterals() {
         String methodSource = """
                 @GPU

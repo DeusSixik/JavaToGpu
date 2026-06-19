@@ -63,6 +63,11 @@ public final class GpuTypeSupport {
         return declaredType.endsWith("[]") && SUPPORTED_PARAMETER_SCALAR_TYPES.contains(componentType(declaredType));
     }
 
+    public static boolean isArrayType(String javaType) {
+        String declaredType = declaredType(javaType);
+        return declaredType != null && declaredType.endsWith("[]");
+    }
+
     public static boolean isSupportedKernelParameterType(String javaType) {
         return SUPPORTED_PARAMETER_SCALAR_TYPES.contains(javaType)
                 || isSupportedArrayType(javaType)

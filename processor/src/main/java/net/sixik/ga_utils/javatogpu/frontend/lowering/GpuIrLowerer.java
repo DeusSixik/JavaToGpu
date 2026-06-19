@@ -727,7 +727,7 @@ public final class GpuIrLowerer {
 
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
             String arrayType = GpuTypeSupport.declaredType(lookupStorageType(scopes, arrayAccessExpr.getName().toString()));
-            if (arrayType != null && GpuTypeSupport.isSupportedArrayType(arrayType)) {
+            if (isInferableArrayType(arrayType, context.structRegistry())) {
                 return GpuTypeSupport.componentType(arrayType);
             }
             return null;
@@ -967,6 +967,16 @@ public final class GpuIrLowerer {
                 .filter(field -> field.name().equals(fieldName))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean isInferableArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+        if (!GpuTypeSupport.isArrayType(typeName)) {
+            return false;
+        }
+        String componentType = GpuTypeSupport.componentType(GpuTypeSupport.declaredType(typeName));
+        return GpuTypeSupport.isSupportedScalarType(componentType)
+                || GpuTypeSupport.isSupportedVectorType(componentType)
+                || resolveStruct(componentType, structRegistry) != null;
     }
 
     private ConstantDescriptor resolveConstant(String constantName, String owner, LoweringContext context) {

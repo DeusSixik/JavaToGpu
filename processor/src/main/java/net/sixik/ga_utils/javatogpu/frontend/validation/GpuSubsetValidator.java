@@ -220,43 +220,47 @@ public final class GpuSubsetValidator {
                     ? GpuTypeSupport.isSupportedKernelParameterType(type)
                     || GpuTypeSupport.isSupportedVectorType(type)
                     || isStructType(type, structRegistry)
+                    || isStructArrayType(type, structRegistry)
                     : GpuTypeSupport.isSupportedHelperParameterType(type) || isStructType(type, structRegistry);
             if (!supported) {
                 issues.add(new GpuValidationIssue(1, 1, "Unsupported GPU parameter type: " + type));
                 return;
             }
             if (parameter.addressSpace() == GpuAddressSpace.GLOBAL && !GpuTypeSupport.isGlobalParameterCompatible(type)) {
+                if (isStructArrayType(type, structRegistry)) {
+                    return;
+                }
                 issues.add(new GpuValidationIssue(
                         1,
                         1,
-                        "@GPUGlobal is only supported on primitive array parameters in the current pipeline: " + type
+                        "@GPUGlobal is only supported on primitive or @GPUStruct array parameters in the current pipeline: " + type
                 ));
                 return;
             }
 
-            if (parameter.addressSpace() == GpuAddressSpace.CONSTANT && !GpuTypeSupport.isSupportedArrayType(type)) {
+            if (parameter.addressSpace() == GpuAddressSpace.CONSTANT && !isSupportedArrayParameterType(type, structRegistry)) {
                 issues.add(new GpuValidationIssue(
                         1,
                         1,
-                        "@GPUConstant is only supported on primitive array parameters in the current pipeline: " + type
+                        "@GPUConstant is only supported on primitive or @GPUStruct array parameters in the current pipeline: " + type
                 ));
                 return;
             }
 
-            if (parameter.addressSpace() == GpuAddressSpace.LOCAL && !GpuTypeSupport.isSupportedArrayType(type)) {
+            if (parameter.addressSpace() == GpuAddressSpace.LOCAL && !isSupportedArrayParameterType(type, structRegistry)) {
                 issues.add(new GpuValidationIssue(
                         1,
                         1,
-                        "@GPULocal is only supported on primitive array parameters in the current pipeline: " + type
+                        "@GPULocal is only supported on primitive or @GPUStruct array parameters in the current pipeline: " + type
                 ));
                 return;
             }
 
-            if (parameter.addressSpace() == GpuAddressSpace.PRIVATE && GpuTypeSupport.isSupportedArrayType(type)) {
+            if (parameter.addressSpace() == GpuAddressSpace.PRIVATE && isSupportedArrayParameterType(type, structRegistry)) {
                 issues.add(new GpuValidationIssue(
                         1,
                         1,
-                        "Primitive array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: " + type
+                        "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: " + type
                 ));
             }
         });
@@ -946,7 +950,7 @@ public final class GpuSubsetValidator {
 
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
             String arrayType = GpuTypeSupport.declaredType(lookupStorageType(scopes, arrayAccessExpr.getName().toString()));
-            if (arrayType != null && GpuTypeSupport.isSupportedArrayType(arrayType)) {
+            if (isInferableArrayType(arrayType, context.structRegistry())) {
                 return GpuTypeSupport.componentType(arrayType);
             }
             return null;
@@ -1460,6 +1464,25 @@ public final class GpuSubsetValidator {
 
     private boolean isStructType(String typeName, Map<String, StructDescriptor> structRegistry) {
         return resolveStruct(typeName, structRegistry) != null;
+    }
+
+    private boolean isStructArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+        return GpuTypeSupport.isArrayType(typeName)
+                && isStructType(GpuTypeSupport.componentType(GpuTypeSupport.declaredType(typeName)), structRegistry);
+    }
+
+    private boolean isSupportedArrayParameterType(String typeName, Map<String, StructDescriptor> structRegistry) {
+        return GpuTypeSupport.isSupportedArrayType(typeName) || isStructArrayType(typeName, structRegistry);
+    }
+
+    private boolean isInferableArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+        if (!GpuTypeSupport.isArrayType(typeName)) {
+            return false;
+        }
+        String componentType = GpuTypeSupport.componentType(GpuTypeSupport.declaredType(typeName));
+        return GpuTypeSupport.isSupportedScalarType(componentType)
+                || GpuTypeSupport.isSupportedVectorType(componentType)
+                || isStructType(componentType, structRegistry);
     }
 
     private boolean isStructAssignmentCompatible(String actualType, String targetType, Map<String, StructDescriptor> structRegistry) {

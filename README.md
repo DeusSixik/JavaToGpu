@@ -51,6 +51,7 @@ Implemented and working:
 - vector local values, helper params / returns and kernel parameters
 - `@GPUStruct`
 - struct kernel parameters
+- struct array buffers
 - OpenCL attributes via `@OpenCLAttributes`
 - OpenCL address spaces: `@GPUGlobal`, `@GPUConstant`, `@GPULocal`
 
@@ -284,6 +285,7 @@ Notes:
 - nested structs are supported
 - struct constants are supported
 - struct kernel parameters are supported
+- `@GPUGlobal Sample[]` style struct buffers are supported
 
 ## OpenCL Address Spaces
 
@@ -393,7 +395,7 @@ That means:
 
 High-value next areas:
 
-- struct arrays and richer complex-type marshalling
+- richer complex-type marshalling and ABI formalization
 - broader OpenCL surface area
 - continued reusable-library hardening
 - CUDA backend

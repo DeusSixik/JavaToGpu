@@ -29,6 +29,7 @@ application {
 }
 
 tasks.register('rewriteGpuMethods', JavaExec) {
+    dependsOn project(':processor').tasks.named('classes')
     dependsOn tasks.named('compileJava')
     classpath = project(':processor').sourceSets.main.runtimeClasspath
     mainClass = 'net.sixik.ga_utils.javatogpu.runtime.GpuMethodBodyRewriter'

@@ -125,6 +125,10 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             readWriteBufferDirect((OpenClBuffer) nativeBuffer, buffer, true);
             return;
         }
+        if (binding.kind() == OpenClArgumentKind.STRUCT_ARRAY) {
+            writeBufferDirect((OpenClBuffer) nativeBuffer, OpenClValuePacker.packStructArray(binding.sourceArray()));
+            return;
+        }
 
         throw new IllegalArgumentException("Unsupported OpenCL upload source type: " + binding.sourceArray().getClass().getName());
     }
@@ -229,6 +233,12 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             buffer.get(values);
             return;
         }
+        if (binding.kind() == OpenClArgumentKind.STRUCT_ARRAY) {
+            ByteBuffer buffer = allocateByteBuffer(OpenClValuePacker.structArrayByteSize(binding.sourceArray()));
+            readBufferDirect((OpenClBuffer) nativeBuffer, buffer);
+            OpenClValuePacker.unpackStructArray(buffer, binding.sourceArray());
+            return;
+        }
 
         throw new IllegalArgumentException("Unsupported OpenCL readback target type: " + binding.sourceArray().getClass().getName());
     }
@@ -321,6 +331,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             case LONG_ARRAY -> (long) binding.length() * Long.BYTES;
             case FLOAT_ARRAY -> (long) binding.length() * Float.BYTES;
             case DOUBLE_ARRAY -> (long) binding.length() * Double.BYTES;
+            case STRUCT_ARRAY -> OpenClValuePacker.structArrayByteSize(binding.sourceArray());
             default -> throw new IllegalArgumentException("Unsupported OpenCL buffer kind: " + binding.kind());
         };
     }

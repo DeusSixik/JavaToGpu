@@ -18,6 +18,13 @@ public final class Main {
         float[] floatInput = new float[]{1.0f, 2.0f, 3.0f, 4.0f};
         float[] basicOutput = new float[floatInput.length];
         float[] vectorOutput = new float[floatInput.length];
+        SamplePoint[] structBufferInput = new SamplePoint[]{
+                new SamplePoint(1.0, 2.0),
+                new SamplePoint(3.0, 4.0),
+                new SamplePoint(5.0, 6.0),
+                new SamplePoint(7.0, 8.0)
+        };
+        SamplePoint[] structBufferOutput = new SamplePoint[structBufferInput.length];
 
         double[] doubleInput = new double[]{1.0, 2.0, 3.0, 4.0};
         double[] structOutput = new double[doubleInput.length];
@@ -40,6 +47,10 @@ public final class Main {
             System.out.println("Running vector example...");
             Examples.vectorExample(new Float2(1.0f, 0.5f), floatInput, vectorOutput);
             System.out.println("vectorOutput[0] = " + vectorOutput[0]);
+
+            System.out.println("Running struct buffer example...");
+            Examples.structBufferExample(structBufferInput, structBufferOutput);
+            System.out.println("structBufferOutput[0] = (" + structBufferOutput[0].x + ", " + structBufferOutput[0].y + ")");
         } catch (RuntimeException exception) {
             System.out.println("GPU execution failed: " + exception.getMessage());
         } finally {
@@ -91,6 +102,16 @@ public final class Main {
             Float2 sum = VectorMath.add(left, bias);
 
             output[id] = sum.x + sum.y;
+        }
+
+        @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+        public static void structBufferExample(
+                @GPUGlobal SamplePoint[] input,
+                @GPUGlobal SamplePoint[] output
+        ) {
+            int id = GPU.get_global_id(0);
+            output[id].x = input[id].x + 1.0;
+            output[id].y = input[id].y + 2.0;
         }
     }
 

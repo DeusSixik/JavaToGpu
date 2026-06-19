@@ -4,6 +4,8 @@ import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.api.anotations.OpenCLAttributes;
 import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
+import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
@@ -25,6 +27,13 @@ final class OpenClValuePacker {
 
     static boolean isStructInstance(Object value) {
         return value.getClass().isAnnotationPresent(GPUStruct.class);
+    }
+
+    static boolean isStructArrayInstance(Object value) {
+        Class<?> type = value.getClass();
+        return type.isArray()
+                && type.getComponentType() != null
+                && type.getComponentType().isAnnotationPresent(GPUStruct.class);
     }
 
     static ByteBuffer packVector(String javaType, Object argument) {
@@ -55,6 +64,36 @@ final class OpenClValuePacker {
         buffer.limit(layout.size());
         buffer.position(0);
         return buffer;
+    }
+
+    static ByteBuffer packStructArray(Object array) {
+        Class<?> componentType = requireStructArrayComponentType(array.getClass());
+        StructLayout layout = resolveStructLayout(componentType);
+        int length = Array.getLength(array);
+        ByteBuffer buffer = zeroedBuffer(layout.size() * length);
+        for (int index = 0; index < length; index++) {
+            Object element = Array.get(array, index);
+            if (element != null) {
+                layout.write(element, buffer, index * layout.size());
+            }
+        }
+        buffer.limit(layout.size() * length);
+        buffer.position(0);
+        return buffer;
+    }
+
+    static int structArrayByteSize(Object array) {
+        Class<?> componentType = requireStructArrayComponentType(array.getClass());
+        return resolveStructLayout(componentType).size() * Array.getLength(array);
+    }
+
+    static void unpackStructArray(ByteBuffer buffer, Object array) {
+        Class<?> componentType = requireStructArrayComponentType(array.getClass());
+        StructLayout layout = resolveStructLayout(componentType);
+        int length = Array.getLength(array);
+        for (int index = 0; index < length; index++) {
+            Array.set(array, index, layout.read(buffer, index * layout.size(), componentType));
+        }
     }
 
     private static StructLayout createStructLayout(Class<?> type) {
@@ -116,6 +155,14 @@ final class OpenClValuePacker {
         StructLayout created = createStructLayout(type);
         StructLayout existing = STRUCT_LAYOUT_CACHE.putIfAbsent(type, created);
         return existing != null ? existing : created;
+    }
+
+    private static Class<?> requireStructArrayComponentType(Class<?> arrayType) {
+        Class<?> componentType = arrayType.getComponentType();
+        if (componentType == null || !componentType.isAnnotationPresent(GPUStruct.class)) {
+            throw new IllegalArgumentException("Unsupported OpenCL struct array type: " + arrayType.getName());
+        }
+        return componentType;
     }
 
     private static ScalarLayout scalarLayout(String javaType) {
@@ -213,6 +260,37 @@ final class OpenClValuePacker {
         }
     }
 
+    private static Object readScalar(ByteBuffer buffer, int offset, String scalarType) {
+        return switch (scalarType) {
+            case "byte" -> buffer.get(offset);
+            case "short" -> buffer.getShort(offset);
+            case "int" -> buffer.getInt(offset);
+            case "long" -> buffer.getLong(offset);
+            case "float" -> buffer.getFloat(offset);
+            case "double" -> buffer.getDouble(offset);
+            case "boolean" -> buffer.get(offset) != 0;
+            default -> throw new IllegalArgumentException("Unsupported OpenCL scalar type for readback: " + scalarType);
+        };
+    }
+
+    private static Object instantiateType(Class<?> type) {
+        try {
+            Constructor<?> constructor = type.getDeclaredConstructor();
+            constructor.setAccessible(true);
+            return constructor.newInstance();
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalArgumentException("Type requires an accessible no-arg constructor for OpenCL readback: " + type.getName(), exception);
+        }
+    }
+
+    private static void writeFieldValue(Object owner, Field field, Object value) {
+        try {
+            field.set(owner, value);
+        } catch (IllegalAccessException exception) {
+            throw new IllegalArgumentException("Failed to write field '" + field.getName() + "' on " + owner.getClass().getName(), exception);
+        }
+    }
+
     private interface ValueLayout {
 
         int size();
@@ -220,6 +298,8 @@ final class OpenClValuePacker {
         int alignment();
 
         void write(Object value, ByteBuffer buffer, int offset);
+
+        Object read(ByteBuffer buffer, int offset, Class<?> targetType);
     }
 
     private record ScalarLayout(String javaType, int size) implements ValueLayout {
@@ -232,6 +312,11 @@ final class OpenClValuePacker {
         @Override
         public void write(Object value, ByteBuffer buffer, int offset) {
             writeScalar(buffer, offset, javaType, value);
+        }
+
+        @Override
+        public Object read(ByteBuffer buffer, int offset, Class<?> targetType) {
+            return readScalar(buffer, offset, javaType);
         }
     }
 
@@ -273,6 +358,17 @@ final class OpenClValuePacker {
                 cursor += componentSize;
             }
         }
+
+        @Override
+        public Object read(ByteBuffer buffer, int offset, Class<?> targetType) {
+            Object instance = instantiateType(targetType);
+            int cursor = offset;
+            for (String fieldName : fieldNames) {
+                writeFieldValue(instance, requireField(targetType, fieldName), readScalar(buffer, cursor, componentType));
+                cursor += componentSize;
+            }
+            return instance;
+        }
     }
 
     private record StructLayout(int size, int alignment, List<FieldLayout> fields) implements ValueLayout {
@@ -286,6 +382,16 @@ final class OpenClValuePacker {
                 }
                 field.layout().write(fieldValue, buffer, offset + field.offset());
             }
+        }
+
+        @Override
+        public Object read(ByteBuffer buffer, int offset, Class<?> targetType) {
+            Object instance = instantiateType(targetType);
+            for (FieldLayout field : fields) {
+                Object fieldValue = field.layout().read(buffer, offset + field.offset(), field.field().getType());
+                writeFieldValue(instance, field.field(), fieldValue);
+            }
+            return instance;
         }
     }
 

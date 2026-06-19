@@ -173,6 +173,46 @@ class OpenClArgumentMarshallerTest {
         assertEquals(7, bytes.getInt(12));
     }
 
+    @Test
+    void marshalsAndUnmarshalsStructArrayKernelParameters() {
+        Sample[] samples = new Sample[]{
+                new Sample(1.0f, 2.0f),
+                null
+        };
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("samples", "sample.Sample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClKernelArguments marshalled = OpenClArgumentMarshaller.marshall(descriptor, new Object[]{samples});
+
+        OpenClArrayArgument argument = assertInstanceOf(OpenClArrayArgument.class, marshalled.values().get(0));
+        assertEquals(OpenClArgumentKind.STRUCT_ARRAY, argument.kind());
+        assertEquals(2, argument.length());
+
+        ByteBuffer bytes = OpenClValuePacker.packStructArray(samples).duplicate().order(ByteOrder.nativeOrder());
+        assertEquals(16, bytes.remaining());
+        assertEquals(1.0f, bytes.getFloat(0));
+        assertEquals(2.0f, bytes.getFloat(4));
+        assertEquals(0.0f, bytes.getFloat(8));
+        assertEquals(0.0f, bytes.getFloat(12));
+
+        bytes.putFloat(0, 3.0f);
+        bytes.putFloat(4, 4.0f);
+        bytes.putFloat(8, 5.0f);
+        bytes.putFloat(12, 6.0f);
+        OpenClValuePacker.unpackStructArray(bytes, samples);
+
+        assertEquals(3.0f, samples[0].x);
+        assertEquals(4.0f, samples[0].y);
+        assertEquals(5.0f, samples[1].x);
+        assertEquals(6.0f, samples[1].y);
+    }
+
     @GPUStruct
     static final class InnerSample {
         int x;
@@ -196,6 +236,20 @@ class OpenClArgumentMarshallerTest {
             this.inner = inner;
             this.bias = bias;
             this.count = count;
+        }
+    }
+
+    @GPUStruct
+    static final class Sample {
+        float x;
+        float y;
+
+        Sample() {
+        }
+
+        Sample(float x, float y) {
+            this.x = x;
+            this.y = y;
         }
     }
 }

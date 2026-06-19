@@ -38,6 +38,52 @@ class OpenClKernelEmitterTest {
     }
 
     @Test
+    void emitsConstantAndLocalAddressSpaceKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUConstant float[] lookup, @GPULocal float[] scratch, @GPUGlobal float[] output) {
+                    int lid = GPU.get_local_id(0);
+                    scratch[lid] = lookup[lid] * 2.0f;
+                    output[lid] = scratch[lid];
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__constant float* lookup, __local float* scratch, __global float* output) {
+                    int lid = get_local_id(0);
+                    scratch[lid] = (lookup[lid] * 2.0f);
+                    output[lid] = scratch[lid];
+                }""", kernel);
+    }
+
+    @Test
+    void emitsVectorKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 value = new Float2(input[id], input[id] * 2.0f);
+                    output[id] = value.x + value.y;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    float2 value = (float2)(input[id], (input[id] * 2.0f));
+                    output[id] = (value.x + value.y);
+                }""", kernel);
+    }
+
+    @Test
     void emitsForLoopKernel() {
         String methodSource = """
                 @GPU
@@ -145,6 +191,27 @@ class OpenClKernelEmitterTest {
                     int id = get_global_id(0);
                     double value = (sqrt(input[id]) + pow(input[id], 2.0));
                     output[id] = max(value, log(input[id]));
+                }""", kernel);
+    }
+
+    @Test
+    void emitsTemplateBasedIntrinsicKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = GPU.fract(input[id] * 1.5f);
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    output[id] = (((input[id] * 1.5f)) - floor((input[id] * 1.5f)));
                 }""", kernel);
     }
 

@@ -1,9 +1,405 @@
-# Java To GPU
-JavaToGPU is a lightweight and powerful framework for translating Java code into OpenCL C on the fly.
-It allows you to write high-performance compute kernels directly in Java, manipulate pointers, and execute computations on the GPU without writing manual C/C++ code or dealing with complex JNI boilerplate.
+# JavaToGpu
 
-## Key Features
-- AST Translation: Code is parsed and translated into native OpenCL C right at build time. No code strings - just pure Java.
-- Zero-Overhead Intrinsics: Full support for GPU math functions (sin, cos, tan, clamp, etc.) via a transparent API.
-- Custom Pointers: Built-in FloatPtr, DoublePtr, and IntPtr types for convenient memory manipulation and passing data by reference in inline methods.
-- Hot Swapping: Calls to methods annotated with @GPU are automatically intercepted by a custom classloader and redirected to the GPU.
+JavaToGpu is a source-first Java-to-OpenCL pipeline.
+
+You write a restricted Java method, mark it with `@GPU`, and during compilation the project:
+
+1. parses the Java source,
+2. validates it against the supported GPU subset,
+3. lowers it to an internal IR,
+4. emits OpenCL C,
+5. generates a launcher,
+6. rewrites direct `@GPU` calls to go through the runtime backend.
+
+Right now the main backend is OpenCL. CUDA is planned, but not the current focus.
+
+## What You Get
+
+- Write kernels in Java instead of hand-writing OpenCL C.
+- Built-in `GPU.*` intrinsics for indexing, math and barriers.
+- `@CCode` helpers for reusable GPU-side functions.
+- Pointer wrappers like `FloatPtr` and `DoublePtr` for helper mutation patterns.
+- Vector wrappers like `Float2`, `Float4`, `Int2`, `Double4`.
+- `@GPUStruct` support for user-defined OpenCL structs.
+- Kernel launcher generation and runtime dispatch through `GpuRuntime`.
+
+## Project Layout
+
+- `processor`
+  The compiler frontend, emitter, runtime support and bytecode rewriter.
+- `test-app`
+  A small sample application that uses the processor as both `implementation` and `annotationProcessor`.
+- `docs`
+  Internal design notes, specs and implementation plans.
+
+## Current Status
+
+Implemented and working:
+
+- arithmetic, comparisons, logical operators
+- casts
+- `if / else`
+- `for`, `while`, `do-while`
+- `switch / case`
+- compound assignments
+- `++ / --`
+- primitive arrays and scalars
+- helper methods via `@CCode`
+- inline helpers
+- native helper bodies via `@CCode(code = "...")`
+- pointer helpers
+- vector local values and helper params / returns
+- `@GPUStruct`
+- OpenCL attributes via `@OpenCLAttributes`
+- OpenCL address spaces: `@GPUGlobal`, `@GPUConstant`, `@GPULocal`
+
+Still intentionally limited:
+
+- non-`void` `@GPU` entry methods are not supported
+- arbitrary Java object allocation is not supported
+- arbitrary Java method calls are not supported
+- struct kernel parameters are not supported yet
+- vector kernel parameters are not supported yet
+- CUDA backend is not implemented yet
+
+## Quick Start
+
+In a consumer module, add the processor both as a dependency and as an annotation processor.
+
+```groovy
+dependencies {
+    implementation project(':processor')
+    annotationProcessor project(':processor')
+}
+```
+
+If you want direct `@GPU` method invocation to execute on the GPU at runtime, configure a backend:
+
+```java
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
+import net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackend;
+
+try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+    GpuRuntime.setBackend(backend);
+    Demo.kernel(input, output);
+} finally {
+    GpuRuntime.setBackend(GpuRuntime.defaultBackend());
+}
+```
+
+## Basic Kernel Example
+
+```java
+import net.sixik.ga_utils.javatogpu.api.GPU;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+
+public final class Demo {
+
+    @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+    public static void saxpy(
+            @GPUGlobal float[] input,
+            @GPUGlobal float[] output
+    ) {
+        int id = GPU.get_global_id(0);
+        output[id] = GPU.sin(input[id]) + 2.0f;
+    }
+}
+```
+
+Conceptually this becomes something like:
+
+```c
+__kernel void jtg_kernel(__global float* input, __global float* output) {
+    int id = get_global_id(0);
+    output[id] = sin(input[id]) + 2.0f;
+}
+```
+
+## `@CCode` Helpers
+
+Use `@CCode` when you want reusable GPU-side helper logic.
+
+```java
+import net.sixik.ga_utils.javatogpu.api.anotations.CCode;
+
+public final class GpuUtils {
+
+    @CCode(inline = true)
+    public static float lerp(float a, float b, float t) {
+        return a + (b - a) * t;
+    }
+}
+```
+
+Call it from a kernel:
+
+```java
+@net.sixik.ga_utils.javatogpu.api.anotations.GPU
+static void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+    int id = GPU.get_global_id(0);
+    output[id] = GpuUtils.lerp(input[id], input[id] * 2.0f, 0.5f);
+}
+```
+
+You can also provide raw backend code:
+
+```java
+@CCode(code = """
+        return (*ptr) * scale;
+        """)
+public static native float scaled(FloatPtr ptr, float scale);
+```
+
+## Pointer Wrappers
+
+Pointer wrappers are useful when a helper needs to mutate a scalar by reference.
+
+```java
+import net.sixik.ga_utils.javatogpu.api.FloatPtr;
+
+public final class GpuUtils {
+
+    @CCode
+    public static void fill(FloatPtr ptr) {
+        ptr.value = 42.0f;
+    }
+}
+
+@net.sixik.ga_utils.javatogpu.api.anotations.GPU
+static void kernel(@GPUGlobal float[] output) {
+    FloatPtr ptr = new FloatPtr();
+    GpuUtils.fill(ptr);
+    output[0] = ptr.value;
+}
+```
+
+Available pointer wrappers:
+
+- `BytePtr`
+- `CharPtr`
+- `ShortPtr`
+- `IntPtr`
+- `LongPtr`
+- `FloatPtr`
+- `DoublePtr`
+
+## Vector Types
+
+JavaToGpu includes Java-side wrappers for OpenCL vector types.
+
+Available vector types:
+
+- `Float2`, `Float3`, `Float4`
+- `Int2`, `Int3`, `Int4`
+- `Long2`, `Long3`, `Long4`
+- `Double2`, `Double3`, `Double4`
+
+Example:
+
+```java
+import net.sixik.ga_utils.javatogpu.api.Float2;
+
+public final class GpuUtils {
+
+    @CCode
+    public static Float2 add(Float2 left, Float2 right) {
+        return new Float2(left.x + right.x, left.y + right.y);
+    }
+}
+
+@net.sixik.ga_utils.javatogpu.api.anotations.GPU
+static void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+    int id = GPU.get_global_id(0);
+    Float2 a = new Float2(input[id], input[id] * 2.0f);
+    Float2 b = new Float2(1.0f);
+    Float2 c = GpuUtils.add(a, b);
+    output[id] = c.x + c.y;
+}
+```
+
+Notes:
+
+- vector locals are supported
+- vector helper params and returns are supported
+- vector kernel parameters are not supported yet
+
+## `@GPUStruct`
+
+Use `@GPUStruct` for OpenCL struct-like data.
+
+Important rule:
+
+- put scalar fields, vector fields, or other `@GPUStruct` fields inside a struct
+- do not use reserved variable names like `struct` in GPU code
+
+Example:
+
+```java
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
+
+@GPUStruct
+public static class Vec2 {
+    public double x;
+    public double y;
+
+    public Vec2() {
+    }
+
+    public Vec2(double x, double y) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+@GPUStruct
+public static class Sample {
+    public Vec2 point;
+    public double bias;
+    public int count;
+
+    public Sample() {
+    }
+
+    public Sample(Vec2 point, double bias, int count) {
+        this.point = point;
+        this.bias = bias;
+        this.count = count;
+    }
+}
+```
+
+Usage inside a kernel:
+
+```java
+@net.sixik.ga_utils.javatogpu.api.anotations.GPU
+static void kernel(@GPUGlobal double[] input, @GPUGlobal double[] output) {
+    int id = GPU.get_global_id(0);
+    Vec2 point = new Vec2(input[id], input[id] * 2.0);
+    Sample sample = new Sample(point, 20.5, 10);
+    output[id] = sample.point.x + sample.point.y + sample.bias + sample.count;
+}
+```
+
+Notes:
+
+- nested structs are supported
+- struct constants are supported
+- struct kernel parameters are not supported yet
+
+## OpenCL Address Spaces
+
+Kernel array parameters can be mapped to OpenCL address spaces:
+
+```java
+@net.sixik.ga_utils.javatogpu.api.anotations.GPU
+static void kernel(
+        @GPUGlobal float[] input,
+        @GPUConstant float[] lookup,
+        @GPULocal float[] scratch,
+        @GPUGlobal float[] output
+) {
+    int id = GPU.get_global_id(0);
+    int lid = GPU.get_local_id(0);
+
+    scratch[lid] = input[id] + lookup[lid];
+    GPU.barrier(GPU.CLK_LOCAL_MEM_FENCE);
+    output[id] = scratch[lid];
+}
+```
+
+Mappings:
+
+- `@GPUGlobal` -> `__global`
+- `@GPUGlobal(constant = true)` -> `__global const`
+- `@GPUConstant` -> `__constant`
+- `@GPULocal` -> `__local`
+
+## OpenCL Attributes
+
+If you need backend-specific attributes, use `@OpenCLAttributes`.
+
+```java
+import net.sixik.ga_utils.javatogpu.api.anotations.OpenCLAttributes;
+
+@OpenCLAttributes({"reqd_work_group_size(16, 1, 1)"})
+@net.sixik.ga_utils.javatogpu.api.anotations.GPU
+static void kernel(@GPUGlobal float[] output) {
+    output[0] = 1.0f;
+}
+```
+
+## Reusable Libraries
+
+When helpers or intrinsics should be reused across compilations, annotate their owner classes:
+
+- `@CCodeLibrary`
+- `@GPUIntrinsicLibrary`
+
+This makes the processor export metadata that another compilation can load from the classpath.
+
+## How Runtime Dispatch Works
+
+At build time, the processor generates:
+
+- OpenCL kernel source
+- a Java launcher class with argument descriptors
+- bytecode rewrites for direct `@GPU` calls in compiled classes
+
+At runtime:
+
+1. your Java code calls the original `@GPU` method,
+2. the rewritten body forwards into the generated launcher,
+3. the launcher delegates to `GpuRuntime`,
+4. the selected backend compiles, caches and runs the kernel.
+
+## Build And Test
+
+Run the full build:
+
+```powershell
+./gradlew.bat clean test --console=plain
+```
+
+Run only the sample app:
+
+```powershell
+./gradlew.bat :test-app:run --console=plain
+```
+
+On Unix-like systems, use `./gradlew` instead of `./gradlew.bat`.
+
+## Sample Code
+
+The best real project examples live here:
+
+- [Main.java](test-app/src/main/java/net/sixik/ga_utils/Main.java)
+- `test-app/src/main/java/net/sixik/ga_utils/*`
+- `processor/src/test/java/net/sixik/ga_utils/javatogpu/*`
+
+The test suite is especially useful because it documents exactly what the current frontend supports.
+
+## Limitations And Design Notes
+
+JavaToGpu is intentionally not a "run any Java on GPU" system.
+
+It is a restricted Java DSL for GPU-safe code generation.
+
+That means:
+
+- explicit support is better than implicit magic
+- unsupported constructs should fail fast at compile time
+- correctness and understandable diagnostics matter more than pretending the whole language is available
+
+## Roadmap
+
+High-value next areas:
+
+- struct kernel parameters and runtime marshalling
+- vector kernel parameters
+- broader OpenCL surface area
+- continued reusable-library hardening
+- CUDA backend
+
+## License
+
+See [LICENSE](LICENSE).

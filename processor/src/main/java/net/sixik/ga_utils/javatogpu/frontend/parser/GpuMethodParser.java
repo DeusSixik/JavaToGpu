@@ -49,6 +49,7 @@ public final class GpuMethodParser {
                 List.copyOf(constants),
                 declaration,
                 parseInlineFlag(declaration),
+                GpuStructParser.parseOpenClAttributes(declaration.getAnnotations()),
                 parseNativeCode(declaration),
                 declaration.isNative()
         );
@@ -56,6 +57,12 @@ public final class GpuMethodParser {
 
     private ParsedGpuParameter toParsedParameter(Parameter parameter) {
         boolean isGlobal = parameter.getAnnotationByName("GPUGlobal").isPresent();
+        boolean isConstantAddressSpace = parameter.getAnnotationByName("GPUConstant").isPresent();
+        boolean isLocal = parameter.getAnnotationByName("GPULocal").isPresent();
+        int addressSpaceAnnotations = (isGlobal ? 1 : 0) + (isConstantAddressSpace ? 1 : 0) + (isLocal ? 1 : 0);
+        if (addressSpaceAnnotations > 1) {
+            throw new IllegalArgumentException("GPU parameter cannot declare multiple address space annotations: " + parameter);
+        }
         boolean constant = parameter.getAnnotationByName("GPUGlobal")
                 .filter(annotation -> annotation.isNormalAnnotationExpr())
                 .flatMap(annotation -> annotation.asNormalAnnotationExpr().getPairs().stream()
@@ -68,9 +75,22 @@ public final class GpuMethodParser {
         return new ParsedGpuParameter(
                 parameter.getNameAsString(),
                 parameter.getTypeAsString(),
-                isGlobal ? GpuAddressSpace.GLOBAL : GpuAddressSpace.PRIVATE,
+                resolveAddressSpace(isGlobal, isConstantAddressSpace, isLocal),
                 constant
         );
+    }
+
+    private GpuAddressSpace resolveAddressSpace(boolean isGlobal, boolean isConstantAddressSpace, boolean isLocal) {
+        if (isGlobal) {
+            return GpuAddressSpace.GLOBAL;
+        }
+        if (isConstantAddressSpace) {
+            return GpuAddressSpace.CONSTANT;
+        }
+        if (isLocal) {
+            return GpuAddressSpace.LOCAL;
+        }
+        return GpuAddressSpace.PRIVATE;
     }
 
     private boolean parseInlineFlag(MethodDeclaration declaration) {

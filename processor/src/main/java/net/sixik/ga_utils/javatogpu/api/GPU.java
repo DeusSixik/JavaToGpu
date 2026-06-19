@@ -2,9 +2,39 @@ package net.sixik.ga_utils.javatogpu.api;
 
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsic;
 
+/**
+ * Java facade for GPU built-ins available inside {@code @GPU} kernels.
+ *
+ * <p>The methods in this class intentionally look like ordinary Java methods so user code remains valid Java, but the
+ * annotation processor maps them directly to backend intrinsics such as {@code get_global_id}, {@code sin} or
+ * {@code barrier}.
+ *
+ * <p>Example:
+ *
+ * <pre>{@code
+ * @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+ * static void kernel(
+ *         @net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal float[] input,
+ *         @net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal float[] output
+ * ) {
+ *     int id = GPU.get_global_id(0);
+ *     output[id] = GPU.sin(input[id]) + GPU.cos(input[id]);
+ * }
+ * }</pre>
+ *
+ * <p>Outside translated GPU code these methods behave like light Java stubs or JVM fallbacks. Their real purpose is to
+ * provide a stable source-level API for code generation.
+ */
 public final class GPU {
 
+    /**
+     * OpenCL flag for synchronizing accesses to {@code __local} memory.
+     */
     public static final int CLK_LOCAL_MEM_FENCE = 1;
+
+    /**
+     * OpenCL flag for synchronizing accesses to {@code __global} memory.
+     */
     public static final int CLK_GLOBAL_MEM_FENCE = 2;
 
     private static final double LOG_2 = Math.log(2.0);
@@ -252,6 +282,16 @@ public final class GPU {
     @GPUIntrinsic(name = "hypot")
     public static double length(double x, double y) {
         return Math.hypot(x, y);
+    }
+
+    @GPUIntrinsic(code = "(({0}) - floor({0}))")
+    public static float fract(float value) {
+        return value - (float) Math.floor(value);
+    }
+
+    @GPUIntrinsic(code = "(({0}) - floor({0}))")
+    public static double fract(double value) {
+        return value - Math.floor(value);
     }
 
     @GPUIntrinsic(name = "get_global_id")

@@ -1,5 +1,6 @@
 package net.sixik.ga_utils.javatogpu.types;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -22,6 +23,21 @@ public final class GpuTypeSupport {
             "LongPtr", "long",
             "FloatPtr", "float",
             "DoublePtr", "double"
+    );
+
+    private static final Map<String, VectorDescriptor> SUPPORTED_VECTOR_TYPES = Map.ofEntries(
+            Map.entry("Float2", new VectorDescriptor("float2", "float", List.of("x", "y"))),
+            Map.entry("Float3", new VectorDescriptor("float3", "float", List.of("x", "y", "z"))),
+            Map.entry("Float4", new VectorDescriptor("float4", "float", List.of("x", "y", "z", "w"))),
+            Map.entry("Int2", new VectorDescriptor("int2", "int", List.of("x", "y"))),
+            Map.entry("Int3", new VectorDescriptor("int3", "int", List.of("x", "y", "z"))),
+            Map.entry("Int4", new VectorDescriptor("int4", "int", List.of("x", "y", "z", "w"))),
+            Map.entry("Long2", new VectorDescriptor("long2", "long", List.of("x", "y"))),
+            Map.entry("Long3", new VectorDescriptor("long3", "long", List.of("x", "y", "z"))),
+            Map.entry("Long4", new VectorDescriptor("long4", "long", List.of("x", "y", "z", "w"))),
+            Map.entry("Double2", new VectorDescriptor("double2", "double", List.of("x", "y"))),
+            Map.entry("Double3", new VectorDescriptor("double3", "double", List.of("x", "y", "z"))),
+            Map.entry("Double4", new VectorDescriptor("double4", "double", List.of("x", "y", "z", "w")))
     );
 
     private GpuTypeSupport() {
@@ -52,7 +68,7 @@ public final class GpuTypeSupport {
     }
 
     public static boolean isSupportedHelperParameterType(String javaType) {
-        return isSupportedKernelParameterType(javaType) || isSupportedPointerType(javaType);
+        return isSupportedKernelParameterType(javaType) || isSupportedPointerType(javaType) || isSupportedVectorType(javaType);
     }
 
     public static boolean isHelperArgumentCompatible(String actualType, String parameterType) {
@@ -62,8 +78,11 @@ public final class GpuTypeSupport {
         if (actualType == null || parameterType == null) {
             return false;
         }
-        if (actualType.equals(parameterType)) {
+        if (actualType.equals(parameterType) || sameVectorType(actualType, parameterType)) {
             return true;
+        }
+        if (isSupportedVectorType(actualType) || isSupportedVectorType(parameterType)) {
+            return false;
         }
         if (isSupportedPointerType(actualType) || isSupportedPointerType(parameterType)) {
             return false;
@@ -87,7 +106,7 @@ public final class GpuTypeSupport {
         if (actualType == null || parameterType == null) {
             return Integer.MAX_VALUE;
         }
-        if (actualType.equals(parameterType)) {
+        if (actualType.equals(parameterType) || sameVectorType(actualType, parameterType)) {
             return 0;
         }
         if (!isHelperArgumentCompatible(actualType, parameterType)) {
@@ -97,7 +116,7 @@ public final class GpuTypeSupport {
     }
 
     public static boolean isSupportedLocalType(String javaType) {
-        return isSupportedScalarType(javaType) || isSupportedPointerType(javaType);
+        return isSupportedScalarType(javaType) || isSupportedPointerType(javaType) || isSupportedVectorType(javaType);
     }
 
     public static boolean isGlobalParameterCompatible(String javaType) {
@@ -106,6 +125,34 @@ public final class GpuTypeSupport {
 
     public static boolean isSupportedPointerType(String javaType) {
         return SUPPORTED_POINTER_TYPES.containsKey(simpleTypeName(declaredType(javaType)));
+    }
+
+    public static boolean isSupportedVectorType(String javaType) {
+        return vectorDescriptor(javaType) != null;
+    }
+
+    public static String vectorComponentType(String javaType, String componentName) {
+        VectorDescriptor descriptor = vectorDescriptor(javaType);
+        if (descriptor == null || !descriptor.fieldNames().contains(componentName)) {
+            return null;
+        }
+        return descriptor.componentType();
+    }
+
+    public static int vectorWidth(String javaType) {
+        VectorDescriptor descriptor = vectorDescriptor(javaType);
+        if (descriptor == null) {
+            throw new IllegalArgumentException("Unsupported vector type: " + javaType);
+        }
+        return descriptor.fieldNames().size();
+    }
+
+    public static String openClVectorTypeName(String javaType) {
+        VectorDescriptor descriptor = vectorDescriptor(javaType);
+        if (descriptor == null) {
+            throw new IllegalArgumentException("Unsupported vector type: " + javaType);
+        }
+        return descriptor.openClTypeName();
     }
 
     public static String pointerValueType(String javaType) {
@@ -143,16 +190,31 @@ public final class GpuTypeSupport {
         return arrayType.substring(0, arrayType.length() - 2);
     }
 
-    private static boolean isPointerReferenceStorageSuffix(String javaType) {
-        return javaType.endsWith(POINTER_REFERENCE_SUFFIX);
-    }
-
-    private static String simpleTypeName(String javaType) {
+    public static String simpleTypeName(String javaType) {
         int separatorIndex = javaType.lastIndexOf('.');
         if (separatorIndex < 0) {
             return javaType;
         }
         return javaType.substring(separatorIndex + 1);
+    }
+
+    private static boolean isPointerReferenceStorageSuffix(String javaType) {
+        return javaType.endsWith(POINTER_REFERENCE_SUFFIX);
+    }
+
+    private static VectorDescriptor vectorDescriptor(String javaType) {
+        String declaredType = declaredType(javaType);
+        if (declaredType == null) {
+            return null;
+        }
+        return SUPPORTED_VECTOR_TYPES.get(simpleTypeName(declaredType));
+    }
+
+    private static boolean sameVectorType(String leftType, String rightType) {
+        if (!isSupportedVectorType(leftType) || !isSupportedVectorType(rightType)) {
+            return false;
+        }
+        return openClVectorTypeName(leftType).equals(openClVectorTypeName(rightType));
     }
 
     private static int helperWideningRank(String javaType) {
@@ -165,5 +227,12 @@ public final class GpuTypeSupport {
             case "double" -> 5;
             default -> Integer.MAX_VALUE;
         };
+    }
+
+    private record VectorDescriptor(
+            String openClTypeName,
+            String componentType,
+            List<String> fieldNames
+    ) {
     }
 }

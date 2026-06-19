@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GpuMethodParserTest {
 
@@ -54,6 +55,7 @@ class GpuMethodParserTest {
         assertEquals("square", method.name());
         assertEquals("float", method.returnType());
         assertTrue(method.inline());
+        assertEquals(0, method.openClAttributes().size());
     }
 
     @Test
@@ -69,5 +71,53 @@ class GpuMethodParserTest {
         assertTrue(method.nativeDeclaration());
         assertEquals("return (*a) + (*b) * 50.0f;\n", method.nativeCode());
         assertEquals("myMath", method.name());
+    }
+
+    @Test
+    void parsesOpenClMethodAttributes() {
+        String methodSource = """
+                @OpenCLAttributes({"reqd_work_group_size(16, 1, 1)", "vec_type_hint(float4)"})
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    output[0] = 1.0f;
+                }
+                """;
+
+        GpuMethodParser parser = new GpuMethodParser();
+        ParsedGpuMethod method = parser.parseMethod(methodSource);
+
+        assertEquals(2, method.openClAttributes().size());
+        assertEquals("reqd_work_group_size(16, 1, 1)", method.openClAttributes().get(0));
+        assertEquals("vec_type_hint(float4)", method.openClAttributes().get(1));
+    }
+
+    @Test
+    void parsesConstantAndLocalAddressSpaces() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUConstant float[] lookup, @GPULocal float[] scratch, @GPUGlobal float[] output) {
+                    output[0] = lookup[0] + scratch[0];
+                }
+                """;
+
+        GpuMethodParser parser = new GpuMethodParser();
+        ParsedGpuMethod method = parser.parseMethod(methodSource);
+
+        assertEquals(GpuAddressSpace.CONSTANT, method.parameters().get(0).addressSpace());
+        assertEquals(GpuAddressSpace.LOCAL, method.parameters().get(1).addressSpace());
+        assertEquals(GpuAddressSpace.GLOBAL, method.parameters().get(2).addressSpace());
+    }
+
+    @Test
+    void rejectsMultipleAddressSpaceAnnotationsOnSingleParameter() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUConstant @GPULocal float[] values) {
+                }
+                """;
+
+        GpuMethodParser parser = new GpuMethodParser();
+
+        assertThrows(IllegalArgumentException.class, () -> parser.parseMethod(methodSource));
     }
 }

@@ -6,6 +6,7 @@ import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
 import net.sixik.ga_utils.javatogpu.frontend.ir.model.GpuIrMethod;
 import net.sixik.ga_utils.javatogpu.frontend.lowering.GpuIrLowerer;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser;
 import net.sixik.ga_utils.javatogpu.frontend.validation.GpuSubsetValidator;
 
@@ -38,7 +39,10 @@ public final class GpuFrontendService {
     }
 
     public static GpuFrontendService createDefault() {
-        GpuIntrinsicDatabase intrinsicDatabase = GpuIntrinsicDatabase.createDefault();
+        return create(GpuIntrinsicDatabase.createDefault());
+    }
+
+    public static GpuFrontendService create(GpuIntrinsicDatabase intrinsicDatabase) {
         return new GpuFrontendService(
                 new GpuMethodParser(),
                 new GpuSubsetValidator(intrinsicDatabase),
@@ -49,7 +53,7 @@ public final class GpuFrontendService {
 
     public ParsedGpuMethod parseAndValidate(String methodSource) {
         ParsedGpuMethod method = parser.parseMethod(methodSource);
-        validator.validateKernel(method, List.of());
+        validator.validateKernel(method, List.of(), List.of());
         return method;
     }
 
@@ -70,16 +74,24 @@ public final class GpuFrontendService {
                 .map(parser::parseMethod)
                 .toList();
 
-        return validateLowerAndEmit(kernelMethod, helperMethods);
+        return validateLowerAndEmit(kernelMethod, helperMethods, List.of());
     }
 
     public String validateLowerAndEmit(ParsedGpuMethod kernelMethod, List<ParsedGpuMethod> helperMethods) {
-        validator.validateKernel(kernelMethod, helperMethods);
+        return validateLowerAndEmit(kernelMethod, helperMethods, List.of());
+    }
 
-        List<GpuIrCompiledMethod> compiledMethods = lowerer.lower(kernelMethod, helperMethods);
+    public String validateLowerAndEmit(
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            List<ParsedGpuStruct> structs
+    ) {
+        validator.validateKernel(kernelMethod, helperMethods, structs);
+
+        List<GpuIrCompiledMethod> compiledMethods = lowerer.lower(kernelMethod, helperMethods, structs);
         List<GpuIrCompiledMethod> compiledHelpers = compiledMethods.subList(0, helperMethods.size());
         GpuIrCompiledMethod compiledKernel = compiledMethods.get(compiledMethods.size() - 1);
-        return emitter.emitProgram(compiledKernel, selectReachableHelpers(compiledKernel, compiledHelpers));
+        return emitter.emitProgram(compiledKernel, selectReachableHelpers(compiledKernel, compiledHelpers), structs);
     }
 
     private List<GpuIrCompiledMethod> selectReachableHelpers(

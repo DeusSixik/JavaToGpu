@@ -81,4 +81,29 @@ class OpenClExecutionPlannerTest {
         assertEquals(OpenClArgumentKind.LONG_ARRAY, plan.bufferBindings().get(1).kind());
         assertEquals(OpenClArgumentKind.FLOAT64, plan.scalarBindings().get(0).kind());
     }
+
+    @Test
+    void buildsExecutionPlanForLocalArrayArgument() {
+        float[] scratch = new float[8];
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("scratch", "float[]", GpuKernelParameterAccess.LOCAL),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(
+                OpenClArgumentMarshaller.marshall(descriptor, new Object[]{scratch, new float[8]})
+        );
+
+        assertEquals(1, plan.localBindings().size());
+        assertEquals(1, plan.bufferBindings().size());
+        assertEquals(OpenClArgumentKind.FLOAT_ARRAY, plan.localBindings().get(0).kind());
+        assertEquals(8L * Float.BYTES, plan.localBindings().get(0).byteSize());
+        assertEquals(0, plan.argumentBindings().get(0).parameterIndex());
+        assertEquals(OpenClArgumentKind.FLOAT_ARRAY, plan.argumentBindings().get(0).localBinding().kind());
+    }
 }

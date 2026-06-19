@@ -1,0 +1,41 @@
+package net.sixik.ga_utils.javatogpu.api;
+
+/**
+ * Java-side representation of the OpenCL {@code double3} vector type.
+ */
+public class Double3 {
+
+    /**
+     * First vector component.
+     */
+    public double x;
+    /**
+     * Second vector component.
+     */
+    public double y;
+    /**
+     * Third vector component.
+     */
+    public double z;
+
+    public Double3() {
+    }
+
+    /**
+     * Broadcast constructor. Fills all components with the same value.
+     */
+    public Double3(double value) {
+        this.x = value;
+        this.y = value;
+        this.z = value;
+    }
+
+    /**
+     * Creates a vector from explicit components.
+     */
+    public Double3(double x, double y, double z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+}

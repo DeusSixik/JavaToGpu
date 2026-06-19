@@ -1,9 +1,11 @@
 package net.sixik.ga_utils;
 
 import net.sixik.ga_utils.javatogpu.api.DoublePtr;
+import net.sixik.ga_utils.javatogpu.api.FloatPtr;
 import net.sixik.ga_utils.javatogpu.api.GPU;
 import net.sixik.ga_utils.javatogpu.api.anotations.CCode;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
 import net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackend;
 
@@ -68,7 +70,18 @@ public class Main {
 
             ptr.value = input[id];
 
-            output[id] = GPU.sin(GpuUtils.c_code(value, value * 2, 0.15f)) * GPU.tan(GpuUtils.aditionalCode(ptr, value));
+            // Correct @GPUStruct usage:
+            // use scalar fields or other @GPUStruct types, then construct them with normal Java constructors.
+            TestVec2 point = new TestVec2(value, input[id]);
+            TestStruct sample = new TestStruct(point, 20.5, 10);
+
+            output[id] =
+                            GPU.sin(GpuUtils.c_code(value, value * 2, 0.15f))
+                                    * GPU.tan(GpuUtils.aditionalCode(ptr, value))
+                            + sample.bias
+                            + sample.point.x
+                            + sample.point.y
+                            + sample.count;
         }
     }
 
@@ -91,6 +104,38 @@ public class Main {
         @CCode(inline = true)
         public static double aditionalCode(DoublePtr ptr, double value) {
             return (ptr.value * ptr.value * 0.5f) + value * ptr.value;
+        }
+    }
+
+    @GPUStruct
+    public static class TestVec2 {
+
+        public double x;
+        public double y;
+
+        public TestVec2() {
+        }
+
+        public TestVec2(double x, double y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    @GPUStruct
+    public static class TestStruct {
+
+        public TestVec2 point;
+        public double bias;
+        public int count;
+
+        public TestStruct() {
+        }
+
+        public TestStruct(TestVec2 point, double bias, int count) {
+            this.point = point;
+            this.bias = bias;
+            this.count = count;
         }
     }
 }

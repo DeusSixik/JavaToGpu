@@ -57,6 +57,11 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                 continue;
             }
 
+            if (binding.localBinding() != null) {
+                bindLocalArgument(execution.compiledKernel(), binding.parameterIndex(), binding.localBinding());
+                continue;
+            }
+
             bindScalarArgument(execution.compiledKernel(), binding.parameterIndex(), binding.scalarBinding());
         }
 
@@ -126,6 +131,13 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     protected void bindBufferArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, Object nativeBuffer) {
         compiledKernel.kernel().setArg(parameterIndex, (OpenClBuffer) nativeBuffer);
+    }
+
+    protected void bindLocalArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, OpenClLocalBinding binding) {
+        checkCl(
+                CL10.clSetKernelArg(compiledKernel.kernel().handle(), parameterIndex, binding.byteSize()),
+                "clSetKernelArg"
+        );
     }
 
     protected void bindScalarArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, OpenClScalarBinding binding) {

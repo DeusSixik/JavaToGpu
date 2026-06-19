@@ -1,6 +1,7 @@
 package net.sixik.ga_utils.javatogpu.runtime.opencl;
 
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
+import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor;
 
 import java.util.Arrays;
@@ -25,10 +26,11 @@ public final class OpenClArgumentMarshaller {
     }
 
     private static OpenClKernelArgument marshallArgument(GpuKernelParameterDescriptor parameterDescriptor, Object argument) {
+        GpuKernelParameterAccess access = parameterDescriptor.access();
         if (argument instanceof byte[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.BYTE_ARRAY,
-                    parameterDescriptor.access(),
+                    access,
                     values,
                     values.length
             );
@@ -36,7 +38,7 @@ public final class OpenClArgumentMarshaller {
         if (argument instanceof short[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.SHORT_ARRAY,
-                    parameterDescriptor.access(),
+                    access,
                     values,
                     values.length
             );
@@ -44,7 +46,7 @@ public final class OpenClArgumentMarshaller {
         if (argument instanceof int[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.INT_ARRAY,
-                    parameterDescriptor.access(),
+                    access,
                     values,
                     values.length
             );
@@ -52,7 +54,7 @@ public final class OpenClArgumentMarshaller {
         if (argument instanceof long[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.LONG_ARRAY,
-                    parameterDescriptor.access(),
+                    access,
                     values,
                     values.length
             );
@@ -60,7 +62,7 @@ public final class OpenClArgumentMarshaller {
         if (argument instanceof float[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.FLOAT_ARRAY,
-                    parameterDescriptor.access(),
+                    access,
                     values,
                     values.length
             );
@@ -68,7 +70,7 @@ public final class OpenClArgumentMarshaller {
         if (argument instanceof double[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.DOUBLE_ARRAY,
-                    parameterDescriptor.access(),
+                    access,
                     values,
                     values.length
             );

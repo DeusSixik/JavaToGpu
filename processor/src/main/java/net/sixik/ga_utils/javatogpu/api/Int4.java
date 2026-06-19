@@ -1,0 +1,47 @@
+package net.sixik.ga_utils.javatogpu.api;
+
+/**
+ * Java-side representation of the OpenCL {@code int4} vector type.
+ */
+public class Int4 {
+
+    /**
+     * First vector component.
+     */
+    public int x;
+    /**
+     * Second vector component.
+     */
+    public int y;
+    /**
+     * Third vector component.
+     */
+    public int z;
+    /**
+     * Fourth vector component.
+     */
+    public int w;
+
+    public Int4() {
+    }
+
+    /**
+     * Broadcast constructor. Fills all components with the same value.
+     */
+    public Int4(int value) {
+        this.x = value;
+        this.y = value;
+        this.z = value;
+        this.w = value;
+    }
+
+    /**
+     * Creates a vector from explicit components.
+     */
+    public Int4(int x, int y, int z, int w) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+        this.w = w;
+    }
+}

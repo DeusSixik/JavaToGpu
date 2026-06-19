@@ -37,9 +37,11 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrArrayAccess;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrBinary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrCast;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrExpression;
+import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrFieldAccess;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrHelperCall;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrIntrinsicCall;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrLiteral;
+import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrStructInit;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrTernary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrUnary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrVariableRef;
@@ -60,6 +62,7 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrVariableDeclarati
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrWhileLoop;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.opencl.OpenClKernelNaming;
 import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
@@ -98,16 +101,25 @@ public final class GpuIrLowerer {
     }
 
     public GpuIrMethod lower(ParsedGpuMethod method) {
-        return lower(method, Map.of(), buildConstantRegistry(method, List.of()));
+        return lower(method, Map.of(), buildConstantRegistry(method, List.of(), List.of()), Map.of());
     }
 
     public List<GpuIrCompiledMethod> lower(ParsedGpuMethod kernelMethod, List<ParsedGpuMethod> helperMethods) {
+        return lower(kernelMethod, helperMethods, List.of());
+    }
+
+    public List<GpuIrCompiledMethod> lower(
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            List<ParsedGpuStruct> structs
+    ) {
         Map<HelperSignature, List<HelperDescriptor>> helperRegistry = buildHelperRegistry(helperMethods);
-        Map<String, List<ConstantDescriptor>> constantRegistry = buildConstantRegistry(kernelMethod, helperMethods);
+        Map<String, List<ConstantDescriptor>> constantRegistry = buildConstantRegistry(kernelMethod, helperMethods, structs);
+        Map<String, StructDescriptor> structRegistry = buildStructRegistry(structs);
         List<GpuIrCompiledMethod> loweredHelpers = helperMethods.stream()
-                .map(helperMethod -> compileMethod(helperMethod, helperRegistry, constantRegistry, false))
+                .map(helperMethod -> compileMethod(helperMethod, helperRegistry, constantRegistry, structRegistry, false))
                 .toList();
-        GpuIrCompiledMethod kernel = compileMethod(kernelMethod, helperRegistry, constantRegistry, true);
+        GpuIrCompiledMethod kernel = compileMethod(kernelMethod, helperRegistry, constantRegistry, structRegistry, true);
 
         List<GpuIrCompiledMethod> compiledMethods = new ArrayList<>(loweredHelpers);
         compiledMethods.add(kernel);
@@ -118,9 +130,10 @@ public final class GpuIrLowerer {
             ParsedGpuMethod method,
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
             Map<String, List<ConstantDescriptor>> constantRegistry,
+            Map<String, StructDescriptor> structRegistry,
             boolean kernelEntry
     ) {
-        GpuIrMethod loweredMethod = lower(method, helperRegistry, constantRegistry);
+        GpuIrMethod loweredMethod = lower(method, helperRegistry, constantRegistry, structRegistry);
         String emittedName = kernelEntry
                 ? OpenClKernelNaming.toEntryPointName(loweredMethod.name())
                 : OpenClKernelNaming.toHelperFunctionName(
@@ -139,7 +152,8 @@ public final class GpuIrLowerer {
     private GpuIrMethod lower(
             ParsedGpuMethod method,
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
-            Map<String, List<ConstantDescriptor>> constantRegistry
+            Map<String, List<ConstantDescriptor>> constantRegistry,
+            Map<String, StructDescriptor> structRegistry
     ) {
         Deque<Map<String, String>> scopes = new ArrayDeque<>();
         scopes.push(new HashMap<>());
@@ -148,7 +162,8 @@ public final class GpuIrLowerer {
                 helperRegistry,
                 method.ownerSimpleName(),
                 method.ownerQualifiedName(),
-                constantRegistry
+                constantRegistry,
+                structRegistry
         );
 
         List<GpuIrStatement> statements = new ArrayList<>();
@@ -485,10 +500,7 @@ public final class GpuIrLowerer {
         }
 
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            if (!(fieldAccessExpr.getScope() instanceof NameExpr nameExpr)) {
-                throw new IllegalArgumentException("Unsupported field access for lowering: " + fieldAccessExpr);
-            }
-            if ("value".equals(fieldAccessExpr.getNameAsString())) {
+            if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr && "value".equals(fieldAccessExpr.getNameAsString())) {
                 String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
                 if (GpuTypeSupport.isPointerReferenceStorage(storageType)) {
                     return new GpuIrUnary("*", new GpuIrVariableRef(nameExpr.getNameAsString()));
@@ -497,6 +509,20 @@ public final class GpuIrLowerer {
                     return new GpuIrVariableRef(nameExpr.getNameAsString());
                 }
                 throw new IllegalArgumentException("The .value field is only supported on pointer helpers for lowering: " + fieldAccessExpr);
+            }
+            String scopeType = inferExpressionType(fieldAccessExpr.getScope(), scopes, context);
+            StructDescriptor struct = resolveStruct(scopeType, context.structRegistry());
+            if (struct != null) {
+                if (resolveStructField(struct, fieldAccessExpr.getNameAsString()) == null) {
+                    throw new IllegalArgumentException("Unknown struct field for lowering: " + fieldAccessExpr);
+                }
+                return new GpuIrFieldAccess(lowerExpression(fieldAccessExpr.getScope(), scopes, context), fieldAccessExpr.getNameAsString());
+            }
+            if (GpuTypeSupport.vectorComponentType(scopeType, fieldAccessExpr.getNameAsString()) != null) {
+                return new GpuIrFieldAccess(lowerExpression(fieldAccessExpr.getScope(), scopes, context), fieldAccessExpr.getNameAsString());
+            }
+            if (!(fieldAccessExpr.getScope() instanceof NameExpr nameExpr)) {
+                throw new IllegalArgumentException("Unsupported field access for lowering: " + fieldAccessExpr);
             }
             ConstantDescriptor constant = resolveConstant(fieldAccessExpr.getNameAsString(), nameExpr.getNameAsString(), context);
             if (constant != null) {
@@ -537,12 +563,17 @@ public final class GpuIrLowerer {
             String owner = methodCallExpr.getScope().map(Expression::toString).orElse("");
             List<String> argumentTypes = inferArgumentTypes(methodCallExpr, scopes, context);
 
-            if ("GPU".equals(owner)) {
+            if (intrinsicDatabase.isAllowedOwner(owner)) {
                 List<GpuIrExpression> arguments = methodCallExpr.getArguments().stream()
                         .map(argument -> lowerExpression(argument, scopes, context))
                         .toList();
                 GpuIntrinsic intrinsic = intrinsicDatabase.require(owner, methodCallExpr.getNameAsString(), argumentTypes);
-                return new GpuIrIntrinsicCall(intrinsic.backendName(), intrinsic.resultType(), arguments);
+                return new GpuIrIntrinsicCall(
+                        intrinsic.backendName(),
+                        intrinsic.codeTemplate(),
+                        intrinsic.resultType(),
+                        arguments
+                );
             }
 
             HelperDescriptor helper = resolveHelperCall(owner, methodCallExpr.getNameAsString(), argumentTypes, context);
@@ -573,6 +604,24 @@ public final class GpuIrLowerer {
                 return lowerExpression(creationExpr.getArgument(0), scopes, context);
             }
             return new GpuIrLiteral(zeroLiteralForType(GpuTypeSupport.pointerValueType(creationExpr.getTypeAsString())));
+        }
+
+        if (expression instanceof ObjectCreationExpr creationExpr) {
+            if (GpuTypeSupport.isSupportedVectorType(creationExpr.getTypeAsString())) {
+                return new GpuIrStructInit(
+                        GpuTypeSupport.declaredType(creationExpr.getTypeAsString()),
+                        creationExpr.getArguments().stream()
+                                .map(argument -> lowerExpression(argument, scopes, context))
+                                .toList()
+                );
+            }
+            StructDescriptor struct = resolveStruct(creationExpr.getTypeAsString(), context.structRegistry());
+            if (struct != null) {
+                List<GpuIrExpression> arguments = creationExpr.getArguments().stream()
+                        .map(argument -> lowerExpression(argument, scopes, context))
+                        .toList();
+                return new GpuIrStructInit(struct.name(), arguments);
+            }
         }
 
         throw new IllegalArgumentException("Unsupported expression for first lowering pass: " + expression);
@@ -685,15 +734,25 @@ public final class GpuIrLowerer {
         }
 
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            if (!(fieldAccessExpr.getScope() instanceof NameExpr nameExpr)) {
-                return null;
-            }
-            if ("value".equals(fieldAccessExpr.getNameAsString())) {
+            if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr && "value".equals(fieldAccessExpr.getNameAsString())) {
                 String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
                 if (storageType == null || !GpuTypeSupport.isSupportedPointerType(GpuTypeSupport.declaredType(storageType))) {
                     return null;
                 }
                 return GpuTypeSupport.pointerValueType(storageType);
+            }
+            String scopeType = inferExpressionType(fieldAccessExpr.getScope(), scopes, context);
+            StructDescriptor struct = resolveStruct(scopeType, context.structRegistry());
+            if (struct != null) {
+                StructFieldDescriptor field = resolveStructField(struct, fieldAccessExpr.getNameAsString());
+                return field == null ? null : field.javaType();
+            }
+            String vectorComponentType = GpuTypeSupport.vectorComponentType(scopeType, fieldAccessExpr.getNameAsString());
+            if (vectorComponentType != null) {
+                return vectorComponentType;
+            }
+            if (!(fieldAccessExpr.getScope() instanceof NameExpr nameExpr)) {
+                return null;
             }
             ConstantDescriptor constant = resolveConstant(fieldAccessExpr.getNameAsString(), nameExpr.getNameAsString(), context);
             return constant == null ? null : constant.javaType();
@@ -734,6 +793,9 @@ public final class GpuIrLowerer {
             if (whenTrueType.equals(whenFalseType)) {
                 return whenTrueType;
             }
+            if (GpuTypeSupport.isSupportedVectorType(whenTrueType) || GpuTypeSupport.isSupportedVectorType(whenFalseType)) {
+                return GpuTypeSupport.isHelperArgumentCompatible(whenTrueType, whenFalseType) ? whenTrueType : null;
+            }
             return inferNumericResultType(whenTrueType, whenFalseType);
         }
 
@@ -754,7 +816,7 @@ public final class GpuIrLowerer {
 
         if (expression instanceof MethodCallExpr methodCallExpr) {
             String owner = methodCallExpr.getScope().map(Expression::toString).orElse("");
-            if ("GPU".equals(owner)) {
+            if (intrinsicDatabase.isAllowedOwner(owner)) {
                 try {
                     return intrinsicDatabase.require(owner, methodCallExpr.getNameAsString(), inferArgumentTypes(methodCallExpr, scopes, context)).resultType();
                 } catch (IllegalArgumentException ignored) {
@@ -762,7 +824,7 @@ public final class GpuIrLowerer {
                 }
             }
 
-            if (!owner.equals("GPU")) {
+            if (!intrinsicDatabase.isAllowedOwner(owner)) {
                 HelperDescriptor helper = resolveHelperCall(
                         owner,
                         methodCallExpr.getNameAsString(),
@@ -779,6 +841,16 @@ public final class GpuIrLowerer {
             return creationExpr.getTypeAsString();
         }
 
+        if (expression instanceof ObjectCreationExpr creationExpr) {
+            if (GpuTypeSupport.isSupportedVectorType(creationExpr.getTypeAsString())) {
+                return GpuTypeSupport.declaredType(creationExpr.getTypeAsString());
+            }
+            StructDescriptor struct = resolveStruct(creationExpr.getTypeAsString(), context.structRegistry());
+            if (struct != null) {
+                return struct.name();
+            }
+        }
+
         return null;
     }
 
@@ -791,13 +863,37 @@ public final class GpuIrLowerer {
         return null;
     }
 
-    private Map<String, List<ConstantDescriptor>> buildConstantRegistry(ParsedGpuMethod kernelMethod, List<ParsedGpuMethod> helperMethods) {
+    private Map<String, List<ConstantDescriptor>> buildConstantRegistry(
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            List<ParsedGpuStruct> structs
+    ) {
         Map<String, List<ConstantDescriptor>> constantRegistry = new HashMap<>();
         List<ParsedGpuMethod> methods = new ArrayList<>();
         methods.add(kernelMethod);
         methods.addAll(helperMethods);
         for (ParsedGpuMethod method : methods) {
             for (ParsedGpuConstant constant : method.constants()) {
+                List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+                boolean alreadyPresent = constants.stream().anyMatch(existing ->
+                        sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName())
+                                && existing.javaType().equals(constant.javaType())
+                                && existing.sourceText().equals(constant.sourceText())
+                );
+                if (alreadyPresent) {
+                    continue;
+                }
+                constants.add(new ConstantDescriptor(
+                        constant.ownerSimpleName(),
+                        constant.ownerQualifiedName(),
+                        constant.name(),
+                        constant.javaType(),
+                        constant.sourceText()
+                ));
+            }
+        }
+        for (ParsedGpuStruct struct : structs) {
+            for (ParsedGpuConstant constant : struct.constants()) {
                 List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
                 boolean alreadyPresent = constants.stream().anyMatch(existing ->
                         sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName())
@@ -835,6 +931,42 @@ public final class GpuIrLowerer {
             ));
         }
         return constantRegistry;
+    }
+
+    private Map<String, StructDescriptor> buildStructRegistry(List<ParsedGpuStruct> structs) {
+        Map<String, StructDescriptor> registry = new HashMap<>();
+        for (ParsedGpuStruct struct : structs) {
+            StructDescriptor descriptor = new StructDescriptor(
+                    struct.ownerSimpleName(),
+                    struct.ownerQualifiedName(),
+                    GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()),
+                    struct.fields().stream()
+                            .map(field -> new StructFieldDescriptor(field.name(), field.javaType()))
+                            .toList()
+            );
+            registry.putIfAbsent(descriptor.ownerSimpleName(), descriptor);
+            registry.putIfAbsent(descriptor.ownerQualifiedName(), descriptor);
+            registry.putIfAbsent(descriptor.name(), descriptor);
+        }
+        return registry;
+    }
+
+    private StructDescriptor resolveStruct(String typeName, Map<String, StructDescriptor> structRegistry) {
+        if (typeName == null) {
+            return null;
+        }
+        StructDescriptor direct = structRegistry.get(typeName);
+        if (direct != null) {
+            return direct;
+        }
+        return structRegistry.get(GpuTypeSupport.simpleTypeName(typeName));
+    }
+
+    private StructFieldDescriptor resolveStructField(StructDescriptor struct, String fieldName) {
+        return struct.fields().stream()
+                .filter(field -> field.name().equals(fieldName))
+                .findFirst()
+                .orElse(null);
     }
 
     private ConstantDescriptor resolveConstant(String constantName, String owner, LoweringContext context) {
@@ -1166,7 +1298,8 @@ public final class GpuIrLowerer {
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
             String ownerSimpleName,
             String ownerQualifiedName,
-            Map<String, List<ConstantDescriptor>> constantRegistry
+            Map<String, List<ConstantDescriptor>> constantRegistry,
+            Map<String, StructDescriptor> structRegistry
     ) {
     }
 
@@ -1190,6 +1323,20 @@ public final class GpuIrLowerer {
             String name,
             String javaType,
             String sourceText
+    ) {
+    }
+
+    private record StructDescriptor(
+            String ownerSimpleName,
+            String ownerQualifiedName,
+            String name,
+            List<StructFieldDescriptor> fields
+    ) {
+    }
+
+    private record StructFieldDescriptor(
+            String name,
+            String javaType
     ) {
     }
 }

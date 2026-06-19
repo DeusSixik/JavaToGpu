@@ -1,12 +1,26 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+/**
+ * Mutable double-by-reference wrapper for GPU helper calls.
+ *
+ * <pre>{@code
+ * DoublePtr ptr = new DoublePtr(1.5);
+ * Helpers.scale(ptr, 2.0);
+ * }</pre>
+ */
 public final class DoublePtr {
 
+    /**
+     * Wrapped scalar value.
+     */
     public double value;
 
     public DoublePtr() {
     }
 
+    /**
+     * Creates a wrapper with an initial value.
+     */
     public DoublePtr(double value) {
         this.value = value;
     }

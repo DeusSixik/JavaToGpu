@@ -1,20 +1,29 @@
 package net.sixik.ga_utils.javatogpu.processors;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import net.sixik.ga_utils.javatogpu.backend.GpuBackendSupport;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.tree.ImportTree;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
+import net.sixik.ga_utils.javatogpu.api.GpuBackendTarget;
 import net.sixik.ga_utils.javatogpu.api.anotations.CCode;
 import net.sixik.ga_utils.javatogpu.api.anotations.CCodeLibrary;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPU;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUConstant;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsic;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsicLibrary;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPULocal;
 import net.sixik.ga_utils.javatogpu.frontend.GpuFrontendService;
+import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.opencl.OpenClKernelNaming;
+import net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser;
 import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -51,31 +60,40 @@ import java.util.stream.Collectors;
 @SupportedAnnotationTypes({
         "net.sixik.ga_utils.javatogpu.api.anotations.GPU",
         "net.sixik.ga_utils.javatogpu.api.anotations.CCode",
-        "net.sixik.ga_utils.javatogpu.api.anotations.CCodeLibrary"
+        "net.sixik.ga_utils.javatogpu.api.anotations.CCodeLibrary",
+        "net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsic",
+        "net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsicLibrary",
+        "net.sixik.ga_utils.javatogpu.api.anotations.GPUConstant",
+        "net.sixik.ga_utils.javatogpu.api.anotations.GPULocal",
+        "net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct"
 })
 public final class GpuCompilerProcessor extends AbstractProcessor {
 
     private static final String HELPER_METADATA_PREFIX = "META-INF/javatogpu/ccode/";
     private static final String HELPER_LIBRARY_INDEX_PATH = HELPER_METADATA_PREFIX + "index.properties";
+    private static final String INTRINSIC_METADATA_PREFIX = "META-INF/javatogpu/intrinsics/";
+    private static final String INTRINSIC_LIBRARY_INDEX_PATH = INTRINSIC_METADATA_PREFIX + "index.properties";
+    private static final GpuBackendTarget TARGET_BACKEND = GpuBackendTarget.OPENCL;
 
     private final Set<String> writtenResources = new HashSet<>();
     private final Set<String> writtenLaunchers = new HashSet<>();
     private final Set<String> writtenHelperMetadata = new HashSet<>();
+    private final Set<String> writtenIntrinsicMetadata = new HashSet<>();
     private final Map<String, String> exportedHelperLibraries = new LinkedHashMap<>();
+    private final Map<String, String> exportedIntrinsicLibraries = new LinkedHashMap<>();
 
     private Trees trees;
-    private GpuFrontendService frontendService;
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         trees = Trees.instance(processingEnv);
-        frontendService = GpuFrontendService.createDefault();
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         collectExportedHelperLibraries(roundEnv);
+        collectExportedIntrinsicLibraries(roundEnv);
 
         try {
             writeHelperMetadata(roundEnv);
@@ -83,6 +101,14 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             processingEnv.getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
                     "Failed to write @CCode metadata: " + exception.getMessage()
+            );
+        }
+        try {
+            writeIntrinsicMetadata(roundEnv);
+        } catch (IOException exception) {
+            processingEnv.getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Failed to write @GPUIntrinsic metadata: " + exception.getMessage()
             );
         }
 
@@ -93,6 +119,14 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 processingEnv.getMessager().printMessage(
                         Diagnostic.Kind.ERROR,
                         "Failed to write @CCode library index: " + exception.getMessage()
+                );
+            }
+            try {
+                writeIntrinsicLibraryIndex();
+            } catch (IOException exception) {
+                processingEnv.getMessager().printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Failed to write @GPUIntrinsic library index: " + exception.getMessage()
                 );
             }
         }
@@ -107,7 +141,12 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             try {
                 ParsedGpuMethod kernelMethod = parseMethod(method);
                 List<ParsedGpuMethod> helpers = collectHelpers(roundEnv, kernelMethod, method);
-                String kernelSource = frontendService.validateLowerAndEmit(kernelMethod, helpers);
+                List<ParsedGpuMethod> intrinsics = collectIntrinsics(roundEnv, kernelMethod, helpers, method);
+                List<ParsedGpuStruct> structs = collectStructs(roundEnv);
+                GpuFrontendService frontendService = GpuFrontendService.create(
+                        GpuIntrinsicDatabase.createDefault(intrinsics, TARGET_BACKEND)
+                );
+                String kernelSource = frontendService.validateLowerAndEmit(kernelMethod, helpers, structs);
                 writeKernelResource(method, kernelSource);
                 writeLauncherSource(method, kernelSource);
             } catch (RuntimeException | IOException exception) {
@@ -155,6 +194,30 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         );
     }
 
+    private ParsedGpuStruct parseStruct(TypeElement type) {
+        return new GpuStructParser().parseStruct(
+                extractTypeSource(type),
+                type.getSimpleName().toString(),
+                type.getQualifiedName().toString()
+        );
+    }
+
+    private String extractTypeSource(TypeElement type) {
+        TreePath path = trees.getPath(type);
+        if (path == null) {
+            throw new IllegalStateException("Cannot resolve source tree for type " + type.getSimpleName());
+        }
+        return path.getLeaf().toString();
+    }
+
+    private List<ParsedGpuStruct> collectStructs(RoundEnvironment roundEnv) {
+        return roundEnv.getElementsAnnotatedWith(GPUStruct.class).stream()
+                .filter(element -> element.getKind().isClass() || element.getKind().isInterface())
+                .map(TypeElement.class::cast)
+                .map(this::parseStruct)
+                .toList();
+    }
+
     private List<ParsedGpuMethod> collectHelpers(
             RoundEnvironment roundEnv,
             ParsedGpuMethod kernelMethod,
@@ -164,6 +227,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 .filter(element -> element.getKind() == ElementKind.METHOD)
                 .map(ExecutableElement.class::cast)
                 .filter(candidate -> !candidate.equals(kernelElement))
+                .filter(this::isSupportedHelperMethod)
                 .map(this::parseMethod)
                 .toList();
 
@@ -172,6 +236,26 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         loadClasspathHelpers(kernelMethod, currentHelpers).forEach(helper -> helpers.putIfAbsent(helperKey(helper), helper));
         validateReusableHelperOwners(kernelElement, kernelMethod, currentHelpers, List.copyOf(helpers.values()));
         return List.copyOf(helpers.values());
+    }
+
+    private List<ParsedGpuMethod> collectIntrinsics(
+            RoundEnvironment roundEnv,
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            ExecutableElement kernelElement
+    ) {
+        List<ParsedGpuMethod> currentIntrinsics = roundEnv.getElementsAnnotatedWith(GPUIntrinsic.class).stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(ExecutableElement.class::cast)
+                .filter(this::isSupportedIntrinsicMethod)
+                .map(this::parseMethod)
+                .toList();
+
+        Map<String, ParsedGpuMethod> intrinsics = new LinkedHashMap<>();
+        currentIntrinsics.forEach(intrinsic -> intrinsics.put(helperKey(intrinsic), intrinsic));
+        loadClasspathIntrinsics(kernelMethod, helperMethods, currentIntrinsics).forEach(intrinsic -> intrinsics.putIfAbsent(helperKey(intrinsic), intrinsic));
+        validateReusableIntrinsicOwners(kernelElement, kernelMethod, helperMethods, currentIntrinsics, List.copyOf(intrinsics.values()));
+        return List.copyOf(intrinsics.values());
     }
 
     private List<ParsedGpuMethod> loadClasspathHelpers(ParsedGpuMethod kernelMethod, List<ParsedGpuMethod> currentHelpers) {
@@ -194,6 +278,33 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         }
 
         return List.copyOf(loadedHelpers.values());
+    }
+
+    private List<ParsedGpuMethod> loadClasspathIntrinsics(
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            List<ParsedGpuMethod> currentIntrinsics
+    ) {
+        Map<String, ParsedGpuMethod> loadedIntrinsics = new LinkedHashMap<>();
+        Set<String> attemptedOwners = new HashSet<>();
+        Deque<String> pendingOwners = new ArrayDeque<>(extractScopedMethodOwners(kernelMethod));
+        helperMethods.forEach(helper -> pendingOwners.addAll(extractScopedMethodOwners(helper)));
+        currentIntrinsics.forEach(intrinsic -> pendingOwners.addAll(extractScopedMethodOwners(intrinsic)));
+
+        while (!pendingOwners.isEmpty()) {
+            String ownerReference = pendingOwners.removeFirst();
+            if (ownerReference.isBlank() || "GPU".equals(ownerReference) || !attemptedOwners.add(ownerReference)) {
+                continue;
+            }
+
+            for (ParsedGpuMethod intrinsic : readIntrinsicMetadata(ownerReference)) {
+                if (loadedIntrinsics.putIfAbsent(helperKey(intrinsic), intrinsic) == null) {
+                    pendingOwners.addAll(extractScopedMethodOwners(intrinsic));
+                }
+            }
+        }
+
+        return List.copyOf(loadedIntrinsics.values());
     }
 
     private List<ParsedGpuConstant> collectConstants(TypeElement owner) {
@@ -232,6 +343,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             Properties properties = new Properties();
             properties.setProperty("ownerSimpleName", owner.getSimpleName().toString());
             properties.setProperty("ownerQualifiedName", owner.getQualifiedName().toString());
+            GpuBackendSupport.storeBackends(properties, "owner.backends", helperOwnerBackends(owner));
 
             List<ParsedGpuConstant> constants = collectConstants(owner);
             properties.setProperty("constants.count", Integer.toString(constants.size()));
@@ -256,6 +368,51 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         }
     }
 
+    private void writeIntrinsicMetadata(RoundEnvironment roundEnv) throws IOException {
+        Map<TypeElement, List<ExecutableElement>> intrinsicsByOwner = roundEnv.getElementsAnnotatedWith(GPUIntrinsic.class).stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(ExecutableElement.class::cast)
+                .collect(Collectors.groupingBy(
+                        method -> (TypeElement) method.getEnclosingElement(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+
+        for (Map.Entry<TypeElement, List<ExecutableElement>> entry : intrinsicsByOwner.entrySet()) {
+            TypeElement owner = entry.getKey();
+            if (!isExportedIntrinsicLibrary(owner)) {
+                continue;
+            }
+            String simpleResourcePath = intrinsicSimpleMetadataPath(owner.getSimpleName().toString());
+            String qualifiedResourcePath = intrinsicQualifiedMetadataPath(owner.getQualifiedName().toString());
+
+            Properties properties = new Properties();
+            properties.setProperty("ownerSimpleName", owner.getSimpleName().toString());
+            properties.setProperty("ownerQualifiedName", owner.getQualifiedName().toString());
+
+            List<ParsedGpuConstant> constants = collectConstants(owner);
+            properties.setProperty("constants.count", Integer.toString(constants.size()));
+            for (int i = 0; i < constants.size(); i++) {
+                ParsedGpuConstant constant = constants.get(i);
+                properties.setProperty("constants." + i + ".name", constant.name());
+                properties.setProperty("constants." + i + ".javaType", constant.javaType());
+                properties.setProperty("constants." + i + ".sourceText", constant.sourceText());
+            }
+
+            properties.setProperty("methods.count", Integer.toString(entry.getValue().size()));
+            for (int i = 0; i < entry.getValue().size(); i++) {
+                properties.setProperty("methods." + i + ".source", extractMethodSource(entry.getValue().get(i)));
+            }
+
+            if (writtenIntrinsicMetadata.add(simpleResourcePath)) {
+                writeMetadataProperties(simpleResourcePath, properties, owner, "JavaToGpu @GPUIntrinsic metadata");
+            }
+            if (writtenIntrinsicMetadata.add(qualifiedResourcePath)) {
+                writeMetadataProperties(qualifiedResourcePath, properties, owner, "JavaToGpu @GPUIntrinsic metadata");
+            }
+        }
+    }
+
     private void collectExportedHelperLibraries(RoundEnvironment roundEnv) {
         roundEnv.getElementsAnnotatedWith(CCodeLibrary.class).stream()
                 .filter(element -> element.getKind().isClass() || element.getKind().isInterface())
@@ -263,33 +420,56 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 .forEach(owner -> exportedHelperLibraries.put(owner.getQualifiedName().toString(), owner.getSimpleName().toString()));
     }
 
+    private void collectExportedIntrinsicLibraries(RoundEnvironment roundEnv) {
+        roundEnv.getElementsAnnotatedWith(GPUIntrinsicLibrary.class).stream()
+                .filter(element -> element.getKind().isClass() || element.getKind().isInterface())
+                .map(TypeElement.class::cast)
+                .forEach(owner -> exportedIntrinsicLibraries.put(owner.getQualifiedName().toString(), owner.getSimpleName().toString()));
+    }
+
     private boolean isExportedHelperLibrary(TypeElement owner) {
         return exportedHelperLibraries.containsKey(owner.getQualifiedName().toString());
     }
 
+    private boolean isExportedIntrinsicLibrary(TypeElement owner) {
+        return exportedIntrinsicLibraries.containsKey(owner.getQualifiedName().toString());
+    }
+
     private void writeHelperLibraryIndex() throws IOException {
-        if (exportedHelperLibraries.isEmpty()) {
+        writeLibraryIndex(exportedHelperLibraries, HELPER_LIBRARY_INDEX_PATH, "JavaToGpu reusable @CCode helper libraries");
+    }
+
+    private void writeIntrinsicLibraryIndex() throws IOException {
+        writeLibraryIndex(exportedIntrinsicLibraries, INTRINSIC_LIBRARY_INDEX_PATH, "JavaToGpu reusable @GPUIntrinsic libraries");
+    }
+
+    private void writeLibraryIndex(Map<String, String> libraries, String resourcePath, String comment) throws IOException {
+        if (libraries.isEmpty()) {
             return;
         }
         Properties properties = new Properties();
-        properties.setProperty("owners.count", Integer.toString(exportedHelperLibraries.size()));
+        properties.setProperty("owners.count", Integer.toString(libraries.size()));
         int index = 0;
-        for (Map.Entry<String, String> entry : exportedHelperLibraries.entrySet()) {
+        for (Map.Entry<String, String> entry : libraries.entrySet()) {
             properties.setProperty("owners." + index + ".qualified", entry.getKey());
             properties.setProperty("owners." + index + ".simple", entry.getValue());
             index++;
         }
 
-        FileObject resource = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", HELPER_LIBRARY_INDEX_PATH);
+        FileObject resource = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", resourcePath);
         try (Writer writer = resource.openWriter()) {
-            properties.store(writer, "JavaToGpu reusable @CCode helper libraries");
+            properties.store(writer, comment);
         }
     }
 
     private void writeHelperMetadataProperties(String resourcePath, Properties properties, TypeElement owner) throws IOException {
+        writeMetadataProperties(resourcePath, properties, owner, "JavaToGpu @CCode metadata");
+    }
+
+    private void writeMetadataProperties(String resourcePath, Properties properties, TypeElement owner, String comment) throws IOException {
         FileObject resource = processingEnv.getFiler().createResource(StandardLocation.CLASS_OUTPUT, "", resourcePath, owner);
         try (Writer writer = resource.openWriter()) {
-            properties.store(writer, "JavaToGpu @CCode metadata");
+            properties.store(writer, comment);
         }
     }
 
@@ -315,6 +495,28 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         return helpers;
     }
 
+    private List<ParsedGpuMethod> readIntrinsicMetadata(String ownerReference) {
+        String simpleOwnerName = lastScopeSegment(ownerReference);
+        List<ParsedGpuMethod> intrinsics = new ArrayList<>();
+        Map<String, ParsedGpuMethod> uniqueIntrinsics = new LinkedHashMap<>();
+        List<String> indexedOwners = resolveIndexedOwners(ownerReference, INTRINSIC_LIBRARY_INDEX_PATH);
+        if (ownerReference.contains(".")) {
+            indexedOwners.forEach(indexedOwner ->
+                    readIntrinsicMetadataFromResource(intrinsicQualifiedMetadataPath(indexedOwner)).forEach(intrinsic -> uniqueIntrinsics.putIfAbsent(helperKey(intrinsic), intrinsic))
+            );
+        } else {
+            if (!indexedOwners.isEmpty()) {
+                indexedOwners.forEach(indexedOwner ->
+                        readIntrinsicMetadataFromResource(intrinsicQualifiedMetadataPath(indexedOwner)).forEach(intrinsic -> uniqueIntrinsics.putIfAbsent(helperKey(intrinsic), intrinsic))
+                );
+            } else {
+                readIntrinsicMetadataFromResource(intrinsicSimpleMetadataPath(simpleOwnerName)).forEach(intrinsic -> uniqueIntrinsics.putIfAbsent(helperKey(intrinsic), intrinsic));
+            }
+        }
+        intrinsics.addAll(uniqueIntrinsics.values());
+        return intrinsics;
+    }
+
     private void validateReusableHelperOwners(
             ExecutableElement kernelElement,
             ParsedGpuMethod kernelMethod,
@@ -338,6 +540,13 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             if (ownerType == null || !hasCCodeMethods(ownerType)) {
                 continue;
             }
+            if (!supportsHelperOwner(ownerType, TARGET_BACKEND) || !hasCCodeMethodsForBackend(ownerType, TARGET_BACKEND)) {
+                throw new IllegalStateException(
+                        "Reusable @CCode helper owner "
+                                + ownerType.getQualifiedName()
+                                + " does not target backend " + TARGET_BACKEND
+                );
+            }
             if (!hasAnnotation(ownerType, CCodeLibrary.class.getName())) {
                 throw new IllegalStateException(
                         "Reusable @CCode helper owner "
@@ -350,6 +559,57 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                             + ownerType.getQualifiedName()
                             + " is annotated with @CCodeLibrary but helper metadata was not found on the classpath; "
                             + "recompile the helper library with the JavaToGpu processor and include its compiled output or JAR"
+            );
+        }
+    }
+
+    private void validateReusableIntrinsicOwners(
+            ExecutableElement kernelElement,
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            List<ParsedGpuMethod> currentIntrinsics,
+            List<ParsedGpuMethod> allIntrinsics
+    ) {
+        Set<String> availableOwners = new HashSet<>();
+        allIntrinsics.forEach(intrinsic -> {
+            availableOwners.add(intrinsic.ownerSimpleName());
+            availableOwners.add(intrinsic.ownerQualifiedName());
+        });
+
+        Set<String> ownerReferences = new HashSet<>(extractScopedMethodOwners(kernelMethod));
+        helperMethods.forEach(helper -> ownerReferences.addAll(extractScopedMethodOwners(helper)));
+        currentIntrinsics.forEach(intrinsic -> ownerReferences.addAll(extractScopedMethodOwners(intrinsic)));
+        for (String ownerReference : ownerReferences) {
+            if (ownerReference.isBlank()
+                    || "GPU".equals(ownerReference)
+                    || availableOwners.contains(ownerReference)
+                    || availableOwners.contains(lastScopeSegment(ownerReference))) {
+                continue;
+            }
+
+            TypeElement ownerType = resolveTypeElement(ownerReference, kernelElement);
+            if (ownerType == null || !hasGpuIntrinsicMethods(ownerType)) {
+                continue;
+            }
+            if (!supportsIntrinsicOwner(ownerType, TARGET_BACKEND) || !hasGpuIntrinsicMethodsForBackend(ownerType, TARGET_BACKEND)) {
+                throw new IllegalStateException(
+                        "Reusable @GPUIntrinsic owner "
+                                + ownerType.getQualifiedName()
+                                + " does not target backend " + TARGET_BACKEND
+                );
+            }
+            if (!hasAnnotation(ownerType, GPUIntrinsicLibrary.class.getName())) {
+                throw new IllegalStateException(
+                        "Reusable @GPUIntrinsic owner "
+                                + ownerType.getQualifiedName()
+                                + " must be annotated with @GPUIntrinsicLibrary to be used from another compilation unit"
+                );
+            }
+            throw new IllegalStateException(
+                    "Reusable @GPUIntrinsic owner "
+                            + ownerType.getQualifiedName()
+                            + " is annotated with @GPUIntrinsicLibrary but intrinsic metadata was not found on the classpath; "
+                            + "recompile the intrinsic library with the JavaToGpu processor and include its compiled output or JAR"
             );
         }
     }
@@ -400,6 +660,28 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 .anyMatch(method -> hasAnnotation(method, CCode.class.getName()));
     }
 
+    private boolean hasCCodeMethodsForBackend(TypeElement ownerType, GpuBackendTarget backendTarget) {
+        return ownerType.getEnclosedElements().stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(ExecutableElement.class::cast)
+                .filter(method -> method.getAnnotation(CCode.class) != null)
+                .anyMatch(method -> GpuBackendSupport.supportsBackend(method.getAnnotation(CCode.class).backends(), backendTarget));
+    }
+
+    private boolean hasGpuIntrinsicMethods(TypeElement ownerType) {
+        return ownerType.getEnclosedElements().stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .anyMatch(method -> hasAnnotation(method, GPUIntrinsic.class.getName()));
+    }
+
+    private boolean hasGpuIntrinsicMethodsForBackend(TypeElement ownerType, GpuBackendTarget backendTarget) {
+        return ownerType.getEnclosedElements().stream()
+                .filter(element -> element.getKind() == ElementKind.METHOD)
+                .map(ExecutableElement.class::cast)
+                .filter(method -> method.getAnnotation(GPUIntrinsic.class) != null)
+                .anyMatch(method -> GpuBackendSupport.supportsBackend(method.getAnnotation(GPUIntrinsic.class).backends(), backendTarget));
+    }
+
     private boolean hasAnnotation(Element element, String annotationQualifiedName) {
         for (AnnotationMirror mirror : element.getAnnotationMirrors()) {
             if (mirror.getAnnotationType().toString().equals(annotationQualifiedName)) {
@@ -410,7 +692,11 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     }
 
     private List<String> resolveIndexedOwners(String ownerReference) {
-        Properties properties = readHelperLibraryIndex();
+        return resolveIndexedOwners(ownerReference, HELPER_LIBRARY_INDEX_PATH);
+    }
+
+    private List<String> resolveIndexedOwners(String ownerReference, String indexPath) {
+        Properties properties = readLibraryIndex(indexPath);
         if (properties.isEmpty()) {
             return ownerReference.contains(".") ? List.of(ownerReference) : List.of();
         }
@@ -439,9 +725,13 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     }
 
     private Properties readHelperLibraryIndex() {
+        return readLibraryIndex(HELPER_LIBRARY_INDEX_PATH);
+    }
+
+    private Properties readLibraryIndex(String indexPath) {
         Properties properties = new Properties();
         try {
-            FileObject resource = processingEnv.getFiler().getResource(StandardLocation.CLASS_PATH, "", HELPER_LIBRARY_INDEX_PATH);
+            FileObject resource = processingEnv.getFiler().getResource(StandardLocation.CLASS_PATH, "", indexPath);
             try (InputStream inputStream = resource.openInputStream()) {
                 properties.load(inputStream);
             }
@@ -452,6 +742,38 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     }
 
     private List<ParsedGpuMethod> readHelperMetadataFromResource(String resourcePath) {
+        try {
+            FileObject resource = processingEnv.getFiler().getResource(StandardLocation.CLASS_PATH, "", resourcePath);
+            Properties properties = new Properties();
+            try (InputStream inputStream = resource.openInputStream()) {
+                properties.load(inputStream);
+            }
+            if (!GpuBackendSupport.containsBackend(properties, "owner.backends", TARGET_BACKEND)) {
+                return List.of();
+            }
+        } catch (IOException exception) {
+            return List.of();
+        }
+        return filterMethodsForBackend(readMethodsMetadataFromResource(resourcePath), "CCode");
+    }
+
+    private List<ParsedGpuMethod> readIntrinsicMetadataFromResource(String resourcePath) {
+        try {
+            FileObject resource = processingEnv.getFiler().getResource(StandardLocation.CLASS_PATH, "", resourcePath);
+            Properties properties = new Properties();
+            try (InputStream inputStream = resource.openInputStream()) {
+                properties.load(inputStream);
+            }
+            if (!GpuBackendSupport.containsBackend(properties, "owner.backends", TARGET_BACKEND)) {
+                return List.of();
+            }
+        } catch (IOException exception) {
+            return List.of();
+        }
+        return filterMethodsForBackend(readMethodsMetadataFromResource(resourcePath), "GPUIntrinsic");
+    }
+
+    private List<ParsedGpuMethod> readMethodsMetadataFromResource(String resourcePath) {
         List<ParsedGpuMethod> helpers = new ArrayList<>();
         try {
             FileObject resource = processingEnv.getFiler().getResource(StandardLocation.CLASS_PATH, "", resourcePath);
@@ -495,6 +817,10 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     }
 
     private Set<String> extractScopedHelperOwners(ParsedGpuMethod method) {
+        return extractScopedMethodOwners(method);
+    }
+
+    private Set<String> extractScopedMethodOwners(ParsedGpuMethod method) {
         return method.declaration().findAll(MethodCallExpr.class).stream()
                 .map(call -> call.getScope().map(Node::toString).orElse(""))
                 .filter(scope -> !scope.isBlank() && !"GPU".equals(scope))
@@ -520,6 +846,14 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         return HELPER_METADATA_PREFIX + ownerQualifiedName.replace('.', '/') + ".properties";
     }
 
+    private String intrinsicSimpleMetadataPath(String ownerSimpleName) {
+        return INTRINSIC_METADATA_PREFIX + ownerSimpleName + ".properties";
+    }
+
+    private String intrinsicQualifiedMetadataPath(String ownerQualifiedName) {
+        return INTRINSIC_METADATA_PREFIX + ownerQualifiedName.replace('.', '/') + ".properties";
+    }
+
     private boolean isSupportedGpuConstantField(VariableElement field) {
         return field.getModifiers().contains(Modifier.STATIC)
                 && field.getModifiers().contains(Modifier.FINAL)
@@ -543,6 +877,48 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             case "long" -> value + "L";
             default -> String.valueOf(value);
         };
+    }
+
+    private boolean isSupportedHelperMethod(ExecutableElement method) {
+        CCode annotation = method.getAnnotation(CCode.class);
+        if (annotation == null || !GpuBackendSupport.supportsBackend(annotation.backends(), TARGET_BACKEND)) {
+            return false;
+        }
+        return supportsHelperOwner((TypeElement) method.getEnclosingElement(), TARGET_BACKEND);
+    }
+
+    private boolean isSupportedIntrinsicMethod(ExecutableElement method) {
+        GPUIntrinsic annotation = method.getAnnotation(GPUIntrinsic.class);
+        if (annotation == null || !GpuBackendSupport.supportsBackend(annotation.backends(), TARGET_BACKEND)) {
+            return false;
+        }
+        return supportsIntrinsicOwner((TypeElement) method.getEnclosingElement(), TARGET_BACKEND);
+    }
+
+    private boolean supportsHelperOwner(TypeElement owner, GpuBackendTarget backendTarget) {
+        CCodeLibrary annotation = owner.getAnnotation(CCodeLibrary.class);
+        return annotation == null || GpuBackendSupport.supportsBackend(annotation.backends(), backendTarget);
+    }
+
+    private boolean supportsIntrinsicOwner(TypeElement owner, GpuBackendTarget backendTarget) {
+        GPUIntrinsicLibrary annotation = owner.getAnnotation(GPUIntrinsicLibrary.class);
+        return annotation == null || GpuBackendSupport.supportsBackend(annotation.backends(), backendTarget);
+    }
+
+    private GpuBackendTarget[] helperOwnerBackends(TypeElement owner) {
+        CCodeLibrary annotation = owner.getAnnotation(CCodeLibrary.class);
+        return annotation == null ? new GpuBackendTarget[]{TARGET_BACKEND} : annotation.backends();
+    }
+
+    private GpuBackendTarget[] ownerBackends(TypeElement owner) {
+        GPUIntrinsicLibrary annotation = owner.getAnnotation(GPUIntrinsicLibrary.class);
+        return annotation == null ? new GpuBackendTarget[]{TARGET_BACKEND} : annotation.backends();
+    }
+
+    private List<ParsedGpuMethod> filterMethodsForBackend(List<ParsedGpuMethod> methods, String annotationName) {
+        return methods.stream()
+                .filter(method -> GpuBackendSupport.supportsParsedMethodBackend(method, annotationName, TARGET_BACKEND))
+                .toList();
     }
 
     private void writeKernelResource(ExecutableElement method, String kernelSource) throws IOException {
@@ -635,6 +1011,12 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     }
 
     private String resolveParameterAccess(VariableElement parameter) {
+        if (parameter.getAnnotation(GPULocal.class) != null) {
+            return "LOCAL";
+        }
+        if (parameter.getAnnotation(GPUConstant.class) != null) {
+            return "READ_ONLY";
+        }
         GPUGlobal global = parameter.getAnnotation(GPUGlobal.class);
         if (global != null) {
             return global.constant() ? "READ_ONLY" : "READ_WRITE";

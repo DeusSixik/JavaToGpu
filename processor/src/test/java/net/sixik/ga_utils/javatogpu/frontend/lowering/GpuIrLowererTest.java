@@ -194,6 +194,26 @@ class GpuIrLowererTest {
     }
 
     @Test
+    void lowersTemplateBasedIntrinsicIntoIr() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = GPU.fract(input[id]);
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+
+        GpuIrAssignment assignment = assertInstanceOf(GpuIrAssignment.class, irMethod.statements().get(1));
+        GpuIrIntrinsicCall fract = assertInstanceOf(GpuIrIntrinsicCall.class, assignment.value());
+        assertEquals("fract", fract.backendName());
+        assertEquals("(({0}) - floor({0}))", fract.codeTemplate());
+        assertEquals("float", fract.resultType());
+    }
+
+    @Test
     void lowersBooleanLocalsIntoIr() {
         String methodSource = """
                 @GPU

@@ -3,9 +3,11 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrArrayAccess;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrBinary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrCast;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrExpression;
+import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrFieldAccess;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrHelperCall;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrIntrinsicCall;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrLiteral;
+import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrStructInit;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrTernary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrUnary;
 import net.sixik.ga_utils.javatogpu.frontend.ir.expression.GpuIrVariableRef;
@@ -27,6 +29,8 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrWhileLoop;
 import net.sixik.ga_utils.javatogpu.frontend.model.GpuAddressSpace;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuParameter;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStructField;
 import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 import java.util.List;
@@ -41,7 +45,23 @@ public final class OpenClKernelEmitter {
     }
 
     public String emitProgram(GpuIrCompiledMethod kernelMethod, List<GpuIrCompiledMethod> helperMethods) {
+        return emitProgram(kernelMethod, helperMethods, List.of());
+    }
+
+    public String emitProgram(
+            GpuIrCompiledMethod kernelMethod,
+            List<GpuIrCompiledMethod> helperMethods,
+            List<ParsedGpuStruct> structs
+    ) {
         StringBuilder builder = new StringBuilder();
+
+        for (ParsedGpuStruct struct : structs) {
+            emitStruct(builder, struct);
+            builder.append("\n");
+        }
+        if (!structs.isEmpty()) {
+            builder.append("\n");
+        }
 
         for (GpuIrCompiledMethod helperMethod : helperMethods) {
             emitFunctionPrototype(builder, helperMethod.parsedMethod(), helperMethod.emittedName());
@@ -74,16 +94,38 @@ public final class OpenClKernelEmitter {
         }
         if (type.endsWith("[]")) {
             String elementType = type.substring(0, type.length() - 2);
-            if (parameter.addressSpace() == GpuAddressSpace.GLOBAL) {
-                return "__global " + (parameter.constant() ? "const " : "") + emitType(elementType) + "* " + parameter.name();
-            }
-            return emitType(elementType) + "* " + parameter.name();
+            return switch (parameter.addressSpace()) {
+                case GLOBAL -> "__global " + (parameter.constant() ? "const " : "") + emitType(elementType) + "* " + parameter.name();
+                case CONSTANT -> "__constant " + emitType(elementType) + "* " + parameter.name();
+                case LOCAL -> "__local " + emitType(elementType) + "* " + parameter.name();
+                case PRIVATE -> emitType(elementType) + "* " + parameter.name();
+            };
         }
 
         if (parameter.addressSpace() == GpuAddressSpace.GLOBAL) {
             return "__global " + emitType(type) + "* " + parameter.name();
         }
         return emitType(type) + " " + parameter.name();
+    }
+
+    private void emitStruct(StringBuilder builder, ParsedGpuStruct struct) {
+        builder.append("typedef struct");
+        if (!struct.openClAttributes().isEmpty()) {
+            builder.append(" ");
+            emitAttributes(builder, struct.openClAttributes(), true);
+        }
+        builder.append("{\n");
+        for (ParsedGpuStructField field : struct.fields()) {
+            builder.append("    ")
+                    .append(emitType(field.javaType()))
+                    .append(" ")
+                    .append(field.name());
+            emitAttributes(builder, field.openClAttributes(), false);
+            builder.append(";\n");
+        }
+        builder.append("} ")
+                .append(GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()))
+                .append(";");
     }
 
     private void emitStatement(StringBuilder builder, GpuIrStatement statement, int indent) {
@@ -255,7 +297,14 @@ public final class OpenClKernelEmitter {
             return arrayAccess.arrayName() + "[" + emitExpression(arrayAccess.index()) + "]";
         }
 
+        if (expression instanceof GpuIrFieldAccess fieldAccess) {
+            return emitExpression(fieldAccess.target()) + "." + fieldAccess.fieldName();
+        }
+
         if (expression instanceof GpuIrIntrinsicCall intrinsicCall) {
+            if (!intrinsicCall.codeTemplate().isBlank()) {
+                return emitIntrinsicTemplate(intrinsicCall);
+            }
             return intrinsicCall.backendName()
                     + "("
                     + intrinsicCall.arguments().stream().map(this::emitExpression).collect(Collectors.joining(", "))
@@ -271,6 +320,16 @@ public final class OpenClKernelEmitter {
 
         if (expression instanceof GpuIrCast cast) {
             return "((" + emitType(cast.targetType()) + ") " + emitExpression(cast.expression()) + ")";
+        }
+
+        if (expression instanceof GpuIrStructInit structInit) {
+            String args = structInit.arguments().isEmpty()
+                    ? "0"
+                    : structInit.arguments().stream().map(this::emitExpression).collect(Collectors.joining(", "));
+            if (GpuTypeSupport.isSupportedVectorType(structInit.structType())) {
+                return "(" + emitType(structInit.structType()) + ")(" + args + ")";
+            }
+            return "(" + emitType(structInit.structType()) + "){" + args + "}";
         }
 
         if (expression instanceof GpuIrBinary binary) {
@@ -294,9 +353,20 @@ public final class OpenClKernelEmitter {
         throw new IllegalArgumentException("Unsupported IR expression: " + expression);
     }
 
+    private String emitIntrinsicTemplate(GpuIrIntrinsicCall intrinsicCall) {
+        String rendered = intrinsicCall.codeTemplate();
+        for (int i = 0; i < intrinsicCall.arguments().size(); i++) {
+            rendered = rendered.replace("{" + i + "}", emitExpression(intrinsicCall.arguments().get(i)));
+        }
+        return rendered;
+    }
+
     private String emitType(String javaType) {
         if (GpuTypeSupport.isSupportedPointerType(javaType)) {
             return emitType(GpuTypeSupport.pointerValueType(javaType));
+        }
+        if (GpuTypeSupport.isSupportedVectorType(javaType)) {
+            return GpuTypeSupport.openClVectorTypeName(javaType);
         }
         return switch (javaType) {
             case "byte" -> "char";
@@ -309,6 +379,7 @@ public final class OpenClKernelEmitter {
         if (!kernel && parsedMethod.inline()) {
             builder.append("inline ");
         }
+        emitAttributes(builder, parsedMethod.openClAttributes(), true);
         builder.append(kernel ? "__kernel void " : emitType(parsedMethod.returnType()) + " ")
                 .append(emittedName)
                 .append("(")
@@ -341,11 +412,27 @@ public final class OpenClKernelEmitter {
         if (parsedMethod.inline()) {
             builder.append("inline ");
         }
+        emitAttributes(builder, parsedMethod.openClAttributes(), true);
         builder.append(emitType(parsedMethod.returnType()))
                 .append(" ")
                 .append(emittedName)
                 .append("(")
                 .append(parsedMethod.parameters().stream().map(this::emitParameter).collect(Collectors.joining(", ")))
                 .append(");\n");
+    }
+
+    private void emitAttributes(StringBuilder builder, List<String> attributes, boolean leadingSpace) {
+        if (attributes.isEmpty()) {
+            return;
+        }
+        if (leadingSpace) {
+            builder.append("__attribute__((")
+                    .append(String.join(", ", attributes))
+                    .append(")) ");
+            return;
+        }
+        builder.append(" __attribute__((")
+                .append(String.join(", ", attributes))
+                .append("))");
     }
 }

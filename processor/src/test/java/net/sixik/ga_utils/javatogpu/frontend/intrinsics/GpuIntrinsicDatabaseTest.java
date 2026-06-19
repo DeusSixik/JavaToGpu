@@ -20,6 +20,7 @@ class GpuIntrinsicDatabaseTest {
         GpuIntrinsic clamp = database.require("GPU", "clamp", List.of("float", "float", "float"));
         GpuIntrinsic barrier = database.require("GPU", "barrier", List.of("int"));
         GpuIntrinsic length = database.require("GPU", "length", List.of("double", "double"));
+        GpuIntrinsic fract = database.require("GPU", "fract", List.of("float"));
         GpuIntrinsic abs = database.require("GPU", "abs", List.of("double"));
         GpuIntrinsic globalId = database.require("GPU", "get_global_id", List.of("int"));
         GpuIntrinsic localId = database.require("GPU", "get_local_id", List.of("int"));
@@ -43,6 +44,10 @@ class GpuIntrinsicDatabaseTest {
         assertEquals("void", barrier.resultType());
         assertEquals(GpuIntrinsicKind.COMMON, length.kind());
         assertEquals("hypot", length.backendName());
+        assertEquals(GpuIntrinsicKind.MATH, fract.kind());
+        assertEquals("fract", fract.backendName());
+        assertEquals("(({0}) - floor({0}))", fract.codeTemplate());
+        assertEquals("float", fract.resultType());
         assertEquals(GpuIntrinsicKind.MATH, abs.kind());
         assertEquals("fabs", abs.backendName());
         assertEquals("double", abs.resultType());

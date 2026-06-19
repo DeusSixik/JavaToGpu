@@ -4,6 +4,7 @@ import java.util.List;
 
 public record OpenClExecutionPlan(
         java.util.List<OpenClBufferBinding> bufferBindings,
+        java.util.List<OpenClLocalBinding> localBindings,
         java.util.List<OpenClScalarBinding> scalarBindings,
         java.util.List<OpenClPlannedArgumentBinding> argumentBindings
 ) {

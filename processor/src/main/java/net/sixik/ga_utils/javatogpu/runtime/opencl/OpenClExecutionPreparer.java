@@ -23,6 +23,9 @@ public final class OpenClExecutionPreparer {
                         OpenClPreparedBufferBinding preparedBuffer = preparedBufferByHandle.get(handleId);
                         return OpenClPreparedArgumentBinding.forBuffer(binding.parameterIndex(), preparedBuffer);
                     }
+                    if (binding.localBinding() != null) {
+                        return OpenClPreparedArgumentBinding.forLocal(binding.parameterIndex(), binding.localBinding());
+                    }
 
                     return OpenClPreparedArgumentBinding.forScalar(binding.parameterIndex(), binding.scalarBinding());
                 })
@@ -31,6 +34,7 @@ public final class OpenClExecutionPreparer {
         return new OpenClPreparedExecution(
                 compiledKernel,
                 preparedBuffers,
+                plan.localBindings(),
                 plan.scalarBindings(),
                 preparedArguments
         );

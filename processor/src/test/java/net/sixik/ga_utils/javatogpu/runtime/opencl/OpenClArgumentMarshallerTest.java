@@ -87,4 +87,25 @@ class OpenClArgumentMarshallerTest {
         assertEquals(OpenClArgumentKind.INT64, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(7)).kind());
         assertEquals(OpenClArgumentKind.FLOAT64, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(8)).kind());
     }
+
+    @Test
+    void marshalsLocalArrayArguments() {
+        float[] scratch = new float[16];
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("scratch", "float[]", GpuKernelParameterAccess.LOCAL)
+                )
+        );
+
+        OpenClKernelArguments marshalled = OpenClArgumentMarshaller.marshall(descriptor, new Object[]{scratch});
+
+        OpenClArrayArgument arrayArgument = assertInstanceOf(OpenClArrayArgument.class, marshalled.values().get(0));
+        assertEquals(OpenClArgumentKind.FLOAT_ARRAY, arrayArgument.kind());
+        assertEquals(GpuKernelParameterAccess.LOCAL, arrayArgument.access());
+        assertSame(scratch, arrayArgument.sourceArray());
+        assertEquals(16, arrayArgument.length());
+    }
 }

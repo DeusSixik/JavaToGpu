@@ -13,6 +13,7 @@ public record ParsedGpuMethod(
         List<ParsedGpuConstant> constants,
         MethodDeclaration declaration,
         boolean inline,
+        List<String> openClAttributes,
         String nativeCode,
         boolean nativeDeclaration
 ) {

@@ -3,6 +3,7 @@ package net.sixik.ga_utils.javatogpu.frontend;
 import net.sixik.ga_utils.javatogpu.frontend.ir.model.GpuIrMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.validation.GpuValidationException;
 import org.junit.jupiter.api.Test;
 
@@ -813,6 +814,187 @@ class GpuFrontendServiceTest {
                     output[id] = mix(output[id], rsqrt(fmax(input[id], 1.0f)), 0.5f);
                     output[id] = mad(output[id], step(0.25f, output[id]), smoothstep(0.0f, 1.0f, output[id]));
                     output[id] = log2(hypot(output[id], 2.0f));
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsCustomIntrinsicLibraryMethod() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = MyIntrinsics.twice(input[id]) + MyIntrinsics.SCALE;
+                }
+                """;
+        String intrinsicSource = """
+                @net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsic(code = "(({0}) * 2.0f)")
+                float twice(float value) {
+                    return value * 2.0f;
+                }
+                """;
+
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser parser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        ParsedGpuMethod kernelMethod = parser.parseMethod(methodSource, "Demo", "sample.Demo");
+        ParsedGpuMethod intrinsicMethod = parser.parseMethod(
+                intrinsicSource,
+                "MyIntrinsics",
+                "sample.MyIntrinsics",
+                List.of(new ParsedGpuConstant("MyIntrinsics", "sample.MyIntrinsics", "SCALE", "float", "0.25f"))
+        );
+
+        GpuFrontendService service = GpuFrontendService.create(
+                net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase.createDefault(List.of(intrinsicMethod))
+        );
+        String kernel = service.validateLowerAndEmit(kernelMethod, List.of());
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    output[id] = (((input[id]) * 2.0f) + 0.25f);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsGpuStructAndAttributes() {
+        String methodSource = """
+                @OpenCLAttributes({"reqd_work_group_size(16, 1, 1)"})
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Vec2 point = new Vec2(input[id], (input[id] * 2.0f));
+                    output[id] = point.x + point.y;
+                }
+                """;
+        String structSource = """
+                @GPUStruct
+                @OpenCLAttributes({"packed"})
+                class Vec2 {
+                    float x;
+                    @OpenCLAttributes({"aligned(8)"})
+                    float y;
+                }
+                """;
+
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser methodParser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser structParser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser();
+        ParsedGpuMethod kernelMethod = methodParser.parseMethod(methodSource, "Demo", "sample.Demo");
+        ParsedGpuStruct struct = structParser.parseStruct(structSource, "Vec2", "sample.Vec2");
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.validateLowerAndEmit(kernelMethod, List.of(), List.of(struct));
+
+        assertEquals("""
+                typedef struct __attribute__((packed)) {
+                    float x;
+                    float y __attribute__((aligned(8)));
+                } Vec2;
+
+                __attribute__((reqd_work_group_size(16, 1, 1))) __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    Vec2 point = (Vec2){input[id], (input[id] * 2.0f)};
+                    output[id] = (point.x + point.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsNestedGpuStructsAndStructConstants() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Vec2 base = new Vec2(input[id], input[id] + Vec2.BIAS);
+                    Line line = new Line(base, new Vec2(input[id] * Line.SCALE, input[id] * 4.0f));
+                    output[id] = line.start.x + line.end.y;
+                }
+                """;
+        String vec2Source = """
+                @GPUStruct
+                class Vec2 {
+                    static final float BIAS = 1.0f;
+                    float x;
+                    float y;
+                }
+                """;
+        String lineSource = """
+                @GPUStruct
+                class Line {
+                    static final float SCALE = 0.5f;
+                    Vec2 start;
+                    Vec2 end;
+                }
+                """;
+
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser methodParser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser structParser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser();
+        ParsedGpuMethod kernelMethod = methodParser.parseMethod(methodSource, "Demo", "sample.Demo");
+        ParsedGpuStruct vec2 = structParser.parseStruct(vec2Source, "Vec2", "sample.Vec2");
+        ParsedGpuStruct line = structParser.parseStruct(lineSource, "Line", "sample.Line");
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.validateLowerAndEmit(kernelMethod, List.of(), List.of(vec2, line));
+
+        assertEquals("""
+                typedef struct{
+                    float x;
+                    float y;
+                } Vec2;
+                typedef struct{
+                    Vec2 start;
+                    Vec2 end;
+                } Line;
+
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    Vec2 base = (Vec2){input[id], (input[id] + 1.0f)};
+                    Line line = (Line){base, (Vec2){(input[id] * 0.5f), (input[id] * 4.0f)}};
+                    output[id] = (line.start.x + line.end.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorHelperProgram() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 base = new Float2(input[id], input[id] * 2.0f);
+                    Float2 bias = new Float2(1.0f);
+                    Float2 shifted = GpuUtils.add(base, bias);
+                    output[id] = shifted.x + shifted.y;
+                }
+                """;
+        String helperSource = """
+                @CCode
+                Float2 add(Float2 left, Float2 right) {
+                    return new Float2(left.x + right.x, left.y + right.y);
+                }
+                """;
+
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser parser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        ParsedGpuMethod kernelMethod = parser.parseMethod(methodSource, "Demo", "sample.Demo");
+        ParsedGpuMethod helperMethod = parser.parseMethod(helperSource, "GpuUtils", "sample.GpuUtils");
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.validateLowerAndEmit(kernelMethod, List.of(helperMethod));
+
+        assertEquals("""
+                float2 jtg_fn_GpuUtils_add_Float2_Float2(float2 left, float2 right);
+
+                float2 jtg_fn_GpuUtils_add_Float2_Float2(float2 left, float2 right) {
+                    return (float2)((left.x + right.x), (left.y + right.y));
+                }
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    float2 base = (float2)(input[id], (input[id] * 2.0f));
+                    float2 bias = (float2)(1.0f);
+                    float2 shifted = jtg_fn_GpuUtils_add_Float2_Float2(base, bias);
+                    output[id] = (shifted.x + shifted.y);
                 }""", kernel);
     }
 

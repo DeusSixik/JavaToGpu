@@ -328,6 +328,79 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
+    void acceptsConstantAndLocalArrayParameters() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUConstant float[] lookup, @GPULocal float[] scratch, @GPUGlobal float[] output) {
+                    int lid = GPU.get_local_id(0);
+                    scratch[lid] = lookup[lid] * 2.0f;
+                    GPU.barrier(GPU.CLK_LOCAL_MEM_FENCE);
+                    output[lid] = scratch[lid];
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(methodSource)));
+    }
+
+    @Test
+    void rejectsAddressSpaceAnnotationsOnHelperParameters() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    helper(output);
+                }
+                """;
+        String helperSource = """
+                @CCode
+                void helper(@GPULocal float[] scratch) {
+                }
+                """;
+
+        assertThrows(
+                GpuValidationException.class,
+                () -> validator.validateKernel(parser.parseMethod(kernelSource), java.util.List.of(parser.parseMethod(helperSource)))
+        );
+    }
+
+    @Test
+    void acceptsVectorLocalsAndHelperReturns() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 base = new Float2(input[id], input[id] * 2.0f);
+                    Float2 bias = new Float2(1.0f);
+                    Float2 shifted = GpuUtils.add(base, bias);
+                    output[id] = shifted.x + shifted.y;
+                }
+                """;
+        String helperSource = """
+                @CCode
+                Float2 add(Float2 left, Float2 right) {
+                    return new Float2(left.x + right.x, left.y + right.y);
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(kernelSource, "Demo", "sample.Demo"),
+                java.util.List.of(parser.parseMethod(helperSource, "GpuUtils", "sample.GpuUtils")),
+                java.util.List.of()
+        ));
+    }
+
+    @Test
+    void rejectsVectorKernelParameters() {
+        String methodSource = """
+                @GPU
+                void kernel(Float2 value, @GPUGlobal float[] output) {
+                    output[0] = value.x;
+                }
+                """;
+
+        assertThrows(GpuValidationException.class, () -> validator.validate(parser.parseMethod(methodSource)));
+    }
+
+    @Test
     void acceptsBooleanLocalsAndLiterals() {
         String methodSource = """
                 @GPU

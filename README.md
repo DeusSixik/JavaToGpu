@@ -48,8 +48,9 @@ Implemented and working:
 - inline helpers
 - native helper bodies via `@CCode(code = "...")`
 - pointer helpers
-- vector local values and helper params / returns
+- vector local values, helper params / returns and kernel parameters
 - `@GPUStruct`
+- struct kernel parameters
 - OpenCL attributes via `@OpenCLAttributes`
 - OpenCL address spaces: `@GPUGlobal`, `@GPUConstant`, `@GPULocal`
 
@@ -58,8 +59,6 @@ Still intentionally limited:
 - non-`void` `@GPU` entry methods are not supported
 - arbitrary Java object allocation is not supported
 - arbitrary Java method calls are not supported
-- struct kernel parameters are not supported yet
-- vector kernel parameters are not supported yet
 - CUDA backend is not implemented yet
 
 ## Quick Start
@@ -221,7 +220,7 @@ Notes:
 
 - vector locals are supported
 - vector helper params and returns are supported
-- vector kernel parameters are not supported yet
+- vector kernel parameters are supported
 
 ## `@GPUStruct`
 
@@ -284,7 +283,7 @@ Notes:
 
 - nested structs are supported
 - struct constants are supported
-- struct kernel parameters are not supported yet
+- struct kernel parameters are supported
 
 ## OpenCL Address Spaces
 
@@ -394,8 +393,7 @@ That means:
 
 High-value next areas:
 
-- struct kernel parameters and runtime marshalling
-- vector kernel parameters
+- struct arrays and richer complex-type marshalling
 - broader OpenCL surface area
 - continued reusable-library hardening
 - CUDA backend

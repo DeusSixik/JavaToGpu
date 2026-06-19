@@ -225,15 +225,6 @@ public final class GpuSubsetValidator {
                 issues.add(new GpuValidationIssue(1, 1, "Unsupported GPU parameter type: " + type));
                 return;
             }
-            if (kernelEntry && isStructType(type, structRegistry)) {
-                issues.add(new GpuValidationIssue(1, 1, "Struct kernel parameters are not supported yet: " + type));
-                return;
-            }
-            if (kernelEntry && GpuTypeSupport.isSupportedVectorType(type)) {
-                issues.add(new GpuValidationIssue(1, 1, "Vector kernel parameters are not supported yet: " + type));
-                return;
-            }
-
             if (parameter.addressSpace() == GpuAddressSpace.GLOBAL && !GpuTypeSupport.isGlobalParameterCompatible(type)) {
                 issues.add(new GpuValidationIssue(
                         1,

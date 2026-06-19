@@ -1,6 +1,9 @@
 package net.sixik.ga_utils.javatogpu.runtime.opencl;
 
 import dev.denismasterherobrine.packager.opencl.core.OpenClException;
+import net.sixik.ga_utils.javatogpu.api.Float2;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
+import net.sixik.ga_utils.javatogpu.api.anotations.OpenCLAttributes;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelInvocation;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess;
@@ -132,6 +135,83 @@ class OpenClGpuRuntimeBackendIntegrationTest {
                 },
                 output
         );
+    }
+
+    @Test
+    void runsFloat2ParameterKernelOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "gpu_vector_entry",
+                "inline://integration/vector-kernel.cl",
+                """
+                        __kernel void gpu_vector_entry(float2 bias, __global float* output) {
+                            int id = get_global_id(0);
+                            output[id] = bias.x + bias.y + (float) id;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("bias", "Float2", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(descriptor, "Skipping vector parameter integration smoke test");
+
+        float[] output = new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+            backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new Float2(1.5f, 2.0f), output}));
+        }
+
+        assertArrayEquals(new float[]{3.5f, 4.5f, 5.5f, 6.5f}, output);
+    }
+
+    @Test
+    void runsStructParameterKernelOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "gpu_struct_entry",
+                "inline://integration/struct-kernel.cl",
+                """
+                        typedef struct __attribute__((packed)) {
+                            float x;
+                            float y __attribute__((aligned(8)));
+                            int count;
+                        } Sample;
+
+                        __kernel void gpu_struct_entry(Sample sample, __global float* output) {
+                            int id = get_global_id(0);
+                            output[id] = sample.x + sample.y + sample.count + (float) id;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("sample", "sample.Sample", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(descriptor, "Skipping struct parameter integration smoke test");
+
+        float[] output = new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+            backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new Sample(1.25f, 2.5f, 3), output}));
+        }
+
+        assertArrayEquals(new float[]{6.75f, 7.75f, 8.75f, 9.75f}, output);
+    }
+
+    @GPUStruct
+    @OpenCLAttributes({"packed"})
+    static final class Sample {
+        float x;
+        @OpenCLAttributes({"aligned(8)"})
+        float y;
+        int count;
+
+        Sample(float x, float y, int count) {
+            this.x = x;
+            this.y = y;
+            this.count = count;
+        }
     }
 
     private static void assumeOpenClAvailable() {

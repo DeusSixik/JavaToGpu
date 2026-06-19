@@ -30,11 +30,15 @@ public final class Main {
             System.out.println("basicOutput[0] = " + basicOutput[0]);
 
             System.out.println("Running @GPUStruct example...");
-            Examples.structExample(doubleInput, structOutput);
+            Examples.structExample(
+                    new SampleData(new SamplePoint(1.5, 2.5), 0.75, 3),
+                    doubleInput,
+                    structOutput
+            );
             System.out.println("structOutput[0] = " + structOutput[0]);
 
             System.out.println("Running vector example...");
-            Examples.vectorExample(floatInput, vectorOutput);
+            Examples.vectorExample(new Float2(1.0f, 0.5f), floatInput, vectorOutput);
             System.out.println("vectorOutput[0] = " + vectorOutput[0]);
         } catch (RuntimeException exception) {
             System.out.println("GPU execution failed: " + exception.getMessage());
@@ -62,27 +66,29 @@ public final class Main {
 
         @net.sixik.ga_utils.javatogpu.api.anotations.GPU
         public static void structExample(
+                SampleData sample,
                 @GPUGlobal double[] input,
                 @GPUGlobal double[] output
         ) {
             int id = GPU.get_global_id(0);
 
             SamplePoint point = new SamplePoint(input[id], input[id] * 2.0);
-            SampleData sample = new SampleData(point, 0.5, id);
+            SampleData localSample = new SampleData(point, 0.5, id);
 
-            output[id] = sample.point.x + sample.point.y + sample.bias + sample.index;
+            output[id] = sample.point.x + sample.point.y + sample.bias + sample.index
+                    + localSample.point.x + localSample.point.y + localSample.bias + localSample.index;
         }
 
         @net.sixik.ga_utils.javatogpu.api.anotations.GPU
         public static void vectorExample(
+                Float2 bias,
                 @GPUGlobal float[] input,
                 @GPUGlobal float[] output
         ) {
             int id = GPU.get_global_id(0);
 
             Float2 left = new Float2(input[id], input[id] * 2.0f);
-            Float2 right = new Float2(1.0f);
-            Float2 sum = VectorMath.add(left, right);
+            Float2 sum = VectorMath.add(left, bias);
 
             output[id] = sum.x + sum.y;
         }

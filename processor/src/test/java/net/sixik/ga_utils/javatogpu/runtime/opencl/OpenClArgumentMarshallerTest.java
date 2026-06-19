@@ -1,10 +1,17 @@
 package net.sixik.ga_utils.javatogpu.runtime.opencl;
 
+import net.sixik.ga_utils.javatogpu.api.Float2;
+import net.sixik.ga_utils.javatogpu.api.Float3;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
+import net.sixik.ga_utils.javatogpu.api.anotations.OpenCLAttributes;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor;
 
 import org.junit.jupiter.api.Test;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -107,5 +114,88 @@ class OpenClArgumentMarshallerTest {
         assertEquals(GpuKernelParameterAccess.LOCAL, arrayArgument.access());
         assertSame(scratch, arrayArgument.sourceArray());
         assertEquals(16, arrayArgument.length());
+    }
+
+    @Test
+    void marshalsVectorKernelParametersAsPackedValues() {
+        Float2 bias = new Float2(1.0f, 2.0f);
+        Float3 normal = new Float3(3.0f, 4.0f, 5.0f);
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("bias", "Float2", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("normal", "Float3", GpuKernelParameterAccess.VALUE)
+                )
+        );
+
+        OpenClKernelArguments marshalled = OpenClArgumentMarshaller.marshall(descriptor, new Object[]{bias, normal});
+
+        OpenClScalarArgument biasArgument = assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(0));
+        assertEquals(OpenClArgumentKind.PACKED_VALUE, biasArgument.kind());
+        ByteBuffer biasBytes = ((ByteBuffer) biasArgument.value()).duplicate().order(ByteOrder.nativeOrder());
+        assertEquals(8, biasBytes.remaining());
+        assertEquals(1.0f, biasBytes.getFloat(0));
+        assertEquals(2.0f, biasBytes.getFloat(4));
+
+        OpenClScalarArgument normalArgument = assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(1));
+        assertEquals(OpenClArgumentKind.PACKED_VALUE, normalArgument.kind());
+        ByteBuffer normalBytes = ((ByteBuffer) normalArgument.value()).duplicate().order(ByteOrder.nativeOrder());
+        assertEquals(16, normalBytes.remaining());
+        assertEquals(3.0f, normalBytes.getFloat(0));
+        assertEquals(4.0f, normalBytes.getFloat(4));
+        assertEquals(5.0f, normalBytes.getFloat(8));
+        assertEquals(0.0f, normalBytes.getFloat(12));
+    }
+
+    @Test
+    void marshalsStructKernelParametersWithNestedLayoutAndAttributes() {
+        PackedSample sample = new PackedSample(new InnerSample(3, 4.5f), 1.25f, 7);
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("sample", "sample.PackedSample", GpuKernelParameterAccess.VALUE)
+                )
+        );
+
+        OpenClKernelArguments marshalled = OpenClArgumentMarshaller.marshall(descriptor, new Object[]{sample});
+
+        OpenClScalarArgument argument = assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(0));
+        assertEquals(OpenClArgumentKind.PACKED_VALUE, argument.kind());
+        ByteBuffer bytes = ((ByteBuffer) argument.value()).duplicate().order(ByteOrder.nativeOrder());
+        assertEquals(16, bytes.remaining());
+        assertEquals(3, bytes.getInt(0));
+        assertEquals(4.5f, bytes.getFloat(4));
+        assertEquals(1.25f, bytes.getFloat(8));
+        assertEquals(7, bytes.getInt(12));
+    }
+
+    @GPUStruct
+    static final class InnerSample {
+        int x;
+        float y;
+
+        InnerSample(int x, float y) {
+            this.x = x;
+            this.y = y;
+        }
+    }
+
+    @GPUStruct
+    @OpenCLAttributes({"packed"})
+    static final class PackedSample {
+        InnerSample inner;
+        @OpenCLAttributes({"aligned(8)"})
+        float bias;
+        int count;
+
+        PackedSample(InnerSample inner, float bias, int count) {
+            this.inner = inner;
+            this.bias = bias;
+            this.count = count;
+        }
     }
 }

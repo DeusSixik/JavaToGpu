@@ -1,6 +1,7 @@
 package net.sixik.ga_utils.javatogpu.frontend.validation;
 
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
+import net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser;
 import net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class GpuSubsetValidatorTest {
 
     private final GpuMethodParser parser = new GpuMethodParser();
+    private final GpuStructParser structParser = new GpuStructParser();
     private final GpuSubsetValidator validator = new GpuSubsetValidator(GpuIntrinsicDatabase.createDefault());
 
     @Test
@@ -389,15 +391,38 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
-    void rejectsVectorKernelParameters() {
+    void acceptsVectorKernelParameters() {
         String methodSource = """
                 @GPU
                 void kernel(Float2 value, @GPUGlobal float[] output) {
-                    output[0] = value.x;
+                    output[0] = value.x + value.y;
                 }
                 """;
 
-        assertThrows(GpuValidationException.class, () -> validator.validate(parser.parseMethod(methodSource)));
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(methodSource)));
+    }
+
+    @Test
+    void acceptsStructKernelParameters() {
+        String structSource = """
+                @GPUStruct
+                class Sample {
+                    float x;
+                    float y;
+                }
+                """;
+        String methodSource = """
+                @GPU
+                void kernel(Sample sample, @GPUGlobal float[] output) {
+                    output[0] = sample.x + sample.y;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(methodSource, "Demo", "sample.Demo"),
+                java.util.List.of(),
+                java.util.List.of(structParser.parseStruct(structSource, "Sample", "sample.Sample"))
+        ));
     }
 
     @Test

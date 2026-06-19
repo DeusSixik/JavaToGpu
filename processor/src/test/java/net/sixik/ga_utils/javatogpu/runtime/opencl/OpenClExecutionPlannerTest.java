@@ -1,5 +1,7 @@
 package net.sixik.ga_utils.javatogpu.runtime.opencl;
 
+import net.sixik.ga_utils.javatogpu.api.Float2;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor;
@@ -105,5 +107,60 @@ class OpenClExecutionPlannerTest {
         assertEquals(8L * Float.BYTES, plan.localBindings().get(0).byteSize());
         assertEquals(0, plan.argumentBindings().get(0).parameterIndex());
         assertEquals(OpenClArgumentKind.FLOAT_ARRAY, plan.argumentBindings().get(0).localBinding().kind());
+    }
+
+    @Test
+    void buildsExecutionPlanForPackedVectorValueArguments() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("bias", "Float2", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(
+                OpenClArgumentMarshaller.marshall(descriptor, new Object[]{new Float2(1.0f, 2.0f), new float[4]})
+        );
+
+        assertEquals(1, plan.scalarBindings().size());
+        assertEquals(1, plan.bufferBindings().size());
+        assertEquals(OpenClArgumentKind.PACKED_VALUE, plan.scalarBindings().get(0).kind());
+        assertEquals(0, plan.argumentBindings().get(0).parameterIndex());
+        assertEquals(OpenClArgumentKind.PACKED_VALUE, plan.argumentBindings().get(0).scalarBinding().kind());
+    }
+
+    @Test
+    void buildsExecutionPlanForPackedStructValueArguments() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("sample", "sample.Sample", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(
+                OpenClArgumentMarshaller.marshall(descriptor, new Object[]{new Sample(2.0f, 3.0f), new float[4]})
+        );
+
+        assertEquals(1, plan.scalarBindings().size());
+        assertEquals(1, plan.bufferBindings().size());
+        assertEquals(OpenClArgumentKind.PACKED_VALUE, plan.scalarBindings().get(0).kind());
+    }
+
+    @GPUStruct
+    static final class Sample {
+        float x;
+        float y;
+
+        Sample(float x, float y) {
+            this.x = x;
+            this.y = y;
+        }
     }
 }

@@ -3,8 +3,7 @@ package net.sixik.ga_utils.javatogpu.runtime.opencl;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor;
-
-import java.util.Arrays;
+import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 public final class OpenClArgumentMarshaller {
 
@@ -26,7 +25,25 @@ public final class OpenClArgumentMarshaller {
     }
 
     private static OpenClKernelArgument marshallArgument(GpuKernelParameterDescriptor parameterDescriptor, Object argument) {
+        if (argument == null) {
+            throw new IllegalArgumentException("Unsupported OpenCL argument type: null for parameter " + parameterDescriptor.name());
+        }
+
         GpuKernelParameterAccess access = parameterDescriptor.access();
+        if (GpuTypeSupport.isSupportedVectorType(parameterDescriptor.javaType())) {
+            return new OpenClScalarArgument(
+                    OpenClArgumentKind.PACKED_VALUE,
+                    access,
+                    OpenClValuePacker.packVector(parameterDescriptor.javaType(), argument)
+            );
+        }
+        if (OpenClValuePacker.isStructInstance(argument)) {
+            return new OpenClScalarArgument(
+                    OpenClArgumentKind.PACKED_VALUE,
+                    access,
+                    OpenClValuePacker.packStruct(argument)
+            );
+        }
         if (argument instanceof byte[] values) {
             return new OpenClArrayArgument(
                     OpenClArgumentKind.BYTE_ARRAY,

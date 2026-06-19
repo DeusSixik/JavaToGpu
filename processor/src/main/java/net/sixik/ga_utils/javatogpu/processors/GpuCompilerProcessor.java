@@ -39,6 +39,10 @@ import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
 import javax.tools.Diagnostic;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
@@ -999,7 +1003,25 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     }
 
     private String toParameterDeclaration(VariableElement parameter) {
-        return parameter.asType() + " " + parameter.getSimpleName();
+        return launcherParameterType(parameter.asType()) + " " + parameter.getSimpleName();
+    }
+
+    private String launcherParameterType(TypeMirror parameterType) {
+        if (parameterType.getKind().isPrimitive()) {
+            return parameterType.toString();
+        }
+        if (parameterType.getKind() == TypeKind.ARRAY) {
+            ArrayType arrayType = (ArrayType) parameterType;
+            return launcherParameterType(arrayType.getComponentType()) + "[]";
+        }
+        if (parameterType.getKind() == TypeKind.DECLARED) {
+            DeclaredType declaredType = (DeclaredType) parameterType;
+            if (declaredType.asElement() instanceof TypeElement typeElement
+                    && !typeElement.getModifiers().contains(Modifier.PUBLIC)) {
+                return Object.class.getName();
+            }
+        }
+        return parameterType.toString();
     }
 
     private String toParameterDescriptorSource(VariableElement parameter) {

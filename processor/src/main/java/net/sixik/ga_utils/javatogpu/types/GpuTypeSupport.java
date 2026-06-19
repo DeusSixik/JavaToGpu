@@ -64,7 +64,9 @@ public final class GpuTypeSupport {
     }
 
     public static boolean isSupportedKernelParameterType(String javaType) {
-        return SUPPORTED_PARAMETER_SCALAR_TYPES.contains(javaType) || isSupportedArrayType(javaType);
+        return SUPPORTED_PARAMETER_SCALAR_TYPES.contains(javaType)
+                || isSupportedArrayType(javaType)
+                || isSupportedVectorType(javaType);
     }
 
     public static boolean isSupportedHelperParameterType(String javaType) {
@@ -147,12 +149,29 @@ public final class GpuTypeSupport {
         return descriptor.fieldNames().size();
     }
 
+    public static int vectorStorageWidth(String javaType) {
+        int width = vectorWidth(javaType);
+        return width == 3 ? 4 : width;
+    }
+
     public static String openClVectorTypeName(String javaType) {
         VectorDescriptor descriptor = vectorDescriptor(javaType);
         if (descriptor == null) {
             throw new IllegalArgumentException("Unsupported vector type: " + javaType);
         }
         return descriptor.openClTypeName();
+    }
+
+    public static List<String> vectorFieldNames(String javaType) {
+        VectorDescriptor descriptor = vectorDescriptor(javaType);
+        if (descriptor == null) {
+            throw new IllegalArgumentException("Unsupported vector type: " + javaType);
+        }
+        return descriptor.fieldNames();
+    }
+
+    public static int vectorByteSize(String javaType) {
+        return vectorStorageWidth(javaType) * scalarByteSize(vectorComponentType(javaType, "x"));
     }
 
     public static String pointerValueType(String javaType) {
@@ -196,6 +215,16 @@ public final class GpuTypeSupport {
             return javaType;
         }
         return javaType.substring(separatorIndex + 1);
+    }
+
+    public static int scalarByteSize(String javaType) {
+        return switch (declaredType(javaType)) {
+            case "byte", "boolean" -> Byte.BYTES;
+            case "short" -> Short.BYTES;
+            case "int", "float" -> Integer.BYTES;
+            case "long", "double" -> Long.BYTES;
+            default -> throw new IllegalArgumentException("Unsupported scalar type size lookup: " + javaType);
+        };
     }
 
     private static boolean isPointerReferenceStorageSuffix(String javaType) {

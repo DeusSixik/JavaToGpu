@@ -160,6 +160,14 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                     CL10.clSetKernelArg1d(compiledKernel.kernel().handle(), parameterIndex, (Double) binding.value()),
                     "clSetKernelArg1d"
             );
+            case PACKED_VALUE -> {
+                ByteBuffer valueBuffer = ((ByteBuffer) binding.value()).duplicate().order(ByteOrder.nativeOrder());
+                valueBuffer.clear();
+                checkCl(
+                        CL10.clSetKernelArg(compiledKernel.kernel().handle(), parameterIndex, valueBuffer),
+                        "clSetKernelArg"
+                );
+            }
             default -> throw new IllegalArgumentException("Unsupported OpenCL scalar binding kind: " + binding.kind());
         }
     }

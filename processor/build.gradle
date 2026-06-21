@@ -5,10 +5,6 @@ plugins {
 group = 'net.sixik.ga_utils'
 version = '1.0-SNAPSHOT'
 
-repositories {
-    mavenCentral()
-}
-
 def osName = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT)
 def lwjglNatives = osName.contains("win")
         ? "natives-windows"
@@ -27,7 +23,7 @@ dependencies {
     implementation 'org.lwjgl:lwjgl-opencl'
     runtimeOnly "org.lwjgl:lwjgl::${lwjglNatives}"
 
-    implementation files("libs/Packager-1.0-SNAPSHOT.jar")
+    implementation 'com.github.DenisMasterHerobrine:Packager:master-SNAPSHOT'
 }
 
 test {

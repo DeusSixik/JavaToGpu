@@ -1159,6 +1159,63 @@ class GpuFrontendServiceTest {
     }
 
     @Test
+    void emitsSimpleOpenClTypeNamesForQualifiedNestedGpuStructReferences() {
+        String methodSource = """
+                @GPU
+                void kernel(Outer.SampleData sample, @GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Outer.Vec2 point = new Outer.Vec2(input[id], input[id] * 2.0f);
+                    Outer.SampleData localSample = new Outer.SampleData(point, 0.5f, id);
+                    output[id] = sample.point.x + localSample.point.y + sample.bias + localSample.index;
+                }
+                """;
+        String vec2Source = """
+                @GPUStruct
+                class Vec2 {
+                    float x;
+                    float y;
+                }
+                """;
+        String sampleDataSource = """
+                @GPUStruct
+                class SampleData {
+                    Outer.Vec2 point;
+                    float bias;
+                    int index;
+                }
+                """;
+
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser methodParser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser structParser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser();
+        ParsedGpuMethod kernelMethod = methodParser.parseMethod(methodSource, "Demo", "sample.Demo");
+        ParsedGpuStruct vec2 = structParser.parseStruct(vec2Source, "Outer.Vec2", "sample.Outer.Vec2");
+        ParsedGpuStruct sampleData = structParser.parseStruct(sampleDataSource, "Outer.SampleData", "sample.Outer.SampleData");
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.validateLowerAndEmit(kernelMethod, List.of(), List.of(vec2, sampleData));
+
+        assertEquals("""
+                typedef struct{
+                    float x;
+                    float y;
+                } Vec2;
+                typedef struct{
+                    Vec2 point;
+                    float bias;
+                    int index;
+                } SampleData;
+
+                __kernel void jtg_kernel(SampleData sample, __global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    Vec2 point = (Vec2){input[id], (input[id] * 2.0f)};
+                    SampleData localSample = (SampleData){point, 0.5f, id};
+                    output[id] = (((sample.point.x + localSample.point.y) + sample.bias) + localSample.index);
+                }""", kernel);
+    }
+
+    @Test
     void parsesValidatesLowersAndEmitsVectorHelperProgram() {
         String methodSource = """
                 @GPU

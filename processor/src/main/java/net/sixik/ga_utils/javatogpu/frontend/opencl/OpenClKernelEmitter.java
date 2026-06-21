@@ -415,7 +415,7 @@ public final class OpenClKernelEmitter {
         return switch (javaType) {
             case "byte" -> "char";
             case "boolean" -> "bool";
-            default -> javaType;
+            default -> GpuTypeSupport.simpleTypeName(javaType);
         };
     }
 

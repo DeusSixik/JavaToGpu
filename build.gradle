@@ -5,12 +5,11 @@ plugins {
 group = 'net.sixik.ga_utils'
 version = '1.0-SNAPSHOT'
 
-repositories {
-    mavenCentral()
-}
-
 allprojects {
-
+    repositories {
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
 }
 
 test {

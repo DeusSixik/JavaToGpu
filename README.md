@@ -25,10 +25,8 @@ You write a restricted Java method, mark it with `@GPU`, and JavaToGpu validates
   Compiler frontend, OpenCL emitter, runtime support, launcher generation, and bytecode rewriting.
 - `test-app`
   Small sample application wired like a real consumer module.
-- `github-wiki`
-  Public GitHub wiki source in Markdown form.
-- `docs`
-  Internal design notes, specs, and implementation plans.
+- `examples-app`
+  Showcase module with multiple focused example kernels.
 
 ## Current Status
 

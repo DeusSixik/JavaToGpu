@@ -1,3 +1,4 @@
 rootProject.name = 'JavaToGpu'
 include 'test-app'
+include 'examples-app'
 include 'processor'

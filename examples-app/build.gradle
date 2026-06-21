@@ -1,0 +1,35 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'net.sixik.ga_utils'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation project(':processor')
+    annotationProcessor project(':processor')
+    implementation 'com.github.javaparser:javaparser-core:3.28.1'
+    implementation 'org.ow2.asm:asm:9.7.1'
+    implementation 'org.ow2.asm:asm-tree:9.7.1'
+}
+
+application {
+    mainClass = 'net.sixik.ga_utils.examples.ExamplesMain'
+}
+
+tasks.register('rewriteGpuMethods', JavaExec) {
+    dependsOn project(':processor').tasks.named('classes')
+    dependsOn tasks.named('compileJava')
+    classpath = project(':processor').sourceSets.main.runtimeClasspath
+    mainClass = 'net.sixik.ga_utils.javatogpu.runtime.GpuMethodBodyRewriter'
+    args layout.buildDirectory.dir('classes/java/main').get().asFile.absolutePath
+}
+
+tasks.named('classes') {
+    dependsOn tasks.named('rewriteGpuMethods')
+}

@@ -10,6 +10,11 @@ package net.sixik.ga_utils.javatogpu.api;
  */
 public enum GpuBackendTarget {
     /**
+     * Unknown or custom backend target.
+     */
+    UNKNOWN,
+
+    /**
      * OpenCL backend.
      */
     OPENCL,

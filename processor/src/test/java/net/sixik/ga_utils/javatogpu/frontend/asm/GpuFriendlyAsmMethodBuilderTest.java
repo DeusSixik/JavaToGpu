@@ -148,6 +148,8 @@ class GpuFriendlyAsmMethodBuilderTest {
                 false,
                 List.of(),
                 "",
+                "",
+                "",
                 false
         );
     }

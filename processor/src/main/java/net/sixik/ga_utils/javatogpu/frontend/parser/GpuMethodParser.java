@@ -51,6 +51,8 @@ public final class GpuMethodParser {
                 parseInlineFlag(declaration),
                 GpuStructParser.parseOpenClAttributes(declaration.getAnnotations()),
                 parseNativeCode(declaration),
+                parseAnnotationStringValue(declaration, "support"),
+                parseAnnotationStringValue(declaration, "callback"),
                 declaration.isNative()
         );
     }
@@ -105,17 +107,21 @@ public final class GpuMethodParser {
                 .orElse(false);
     }
 
-    private String parseNativeCode(MethodDeclaration declaration) {
+    private String parseAnnotationStringValue(MethodDeclaration declaration, String propertyName) {
         return declaration.getAnnotationByName("CCode")
                 .filter(annotation -> annotation.isNormalAnnotationExpr())
                 .flatMap(annotation -> annotation.asNormalAnnotationExpr().getPairs().stream()
-                        .filter(pair -> pair.getNameAsString().equals("code"))
+                        .filter(pair -> pair.getNameAsString().equals(propertyName))
                         .findFirst()
                         .map(pair -> pair.getValue()))
                 .filter(LiteralStringValueExpr.class::isInstance)
                 .map(LiteralStringValueExpr.class::cast)
                 .map(this::literalStringValue)
                 .orElse("");
+    }
+
+    private String parseNativeCode(MethodDeclaration declaration) {
+        return parseAnnotationStringValue(declaration, "code");
     }
 
     private String literalStringValue(LiteralStringValueExpr literal) {

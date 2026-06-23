@@ -84,13 +84,41 @@ To execute direct `@GPU` calls on the GPU at runtime, configure a backend:
 
 ```java
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
-import net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackend;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeScope;
 
-try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
-    GpuRuntime.setBackend(backend);
+try (GpuRuntimeScope ignored = GpuRuntime.useOpenClSharedCache()) {
     Demo.kernel(input, output);
 } finally {
-    GpuRuntime.setBackend(GpuRuntime.defaultBackend());
+    GpuRuntime.shutdownOpenClSharedCache();
+}
+```
+
+## Runtime Scopes
+
+Choose the runtime scope based on how often you call GPU kernels:
+
+- `GpuRuntime.useOpenCl()`
+  Good default for simple applications, short-lived tools, tests, or cases where you want an isolated backend instance.
+- `GpuRuntime.useOpenClSharedCache()`
+  Best choice for hot paths and repeated kernel calls. Compiled kernels and the OpenCL session stay warm across backend instances, so repeated launches avoid paying compile/setup cost again.
+
+Simple isolated scope:
+
+```java
+try (GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+    Demo.kernel(input, output);
+}
+```
+
+Hot repeated-call scope with explicit shared-cache shutdown:
+
+```java
+try (GpuRuntimeScope ignored = GpuRuntime.useOpenClSharedCache()) {
+    Demo.kernel(input, output);
+    Demo.kernel(input, output);
+    Demo.kernel(input, output);
+} finally {
+    GpuRuntime.shutdownOpenClSharedCache();
 }
 ```
 

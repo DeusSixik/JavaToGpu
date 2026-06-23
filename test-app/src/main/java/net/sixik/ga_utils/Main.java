@@ -7,7 +7,7 @@ import net.sixik.ga_utils.javatogpu.api.anotations.CCode;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
-import net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackend;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeScope;
 
 public final class Main {
 
@@ -29,8 +29,7 @@ public final class Main {
         double[] doubleInput = new double[]{1.0, 2.0, 3.0, 4.0};
         double[] structOutput = new double[doubleInput.length];
 
-        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
-            GpuRuntime.setBackend(backend);
+        try (GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
 
             System.out.println("Running basic @GPU example...");
             Examples.basicMath(floatInput, basicOutput);
@@ -53,8 +52,6 @@ public final class Main {
             System.out.println("structBufferOutput[0] = (" + structBufferOutput[0].x + ", " + structBufferOutput[0].y + ")");
         } catch (RuntimeException exception) {
             System.out.println("GPU execution failed: " + exception.getMessage());
-        } finally {
-            GpuRuntime.setBackend(GpuRuntime.defaultBackend());
         }
     }
 

@@ -36,8 +36,10 @@ import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -45,7 +47,7 @@ public final class OpenClKernelEmitter {
 
     public String emit(ParsedGpuMethod parsedMethod, GpuIrMethod irMethod) {
         StringBuilder builder = new StringBuilder();
-        emitFunction(builder, parsedMethod, irMethod, OpenClKernelNaming.toEntryPointName(irMethod.name()), true);
+        emitFunction(builder, parsedMethod, irMethod, OpenClKernelNaming.toEntryPointName(irMethod.name()), true, Map.of());
         return builder.toString();
     }
 
@@ -59,6 +61,7 @@ public final class OpenClKernelEmitter {
             List<ParsedGpuStruct> structs
     ) {
         StringBuilder builder = new StringBuilder();
+        Map<String, String> helperNameIndex = buildHelperNameIndex(helperMethods);
 
         for (ParsedGpuStruct struct : structs) {
             emitStruct(builder, struct);
@@ -77,7 +80,7 @@ public final class OpenClKernelEmitter {
         }
 
         for (GpuIrCompiledMethod helperMethod : helperMethods) {
-            emitFunction(builder, helperMethod.parsedMethod(), helperMethod.irMethod(), helperMethod.emittedName(), false);
+            emitFunction(builder, helperMethod.parsedMethod(), helperMethod.irMethod(), helperMethod.emittedName(), false, helperNameIndex);
             builder.append("\n");
         }
 
@@ -86,7 +89,8 @@ public final class OpenClKernelEmitter {
                 kernelMethod.parsedMethod(),
                 kernelMethod.irMethod(),
                 kernelMethod.emittedName(),
-                true
+                true,
+                helperNameIndex
         );
 
         return builder.toString();
@@ -466,7 +470,14 @@ public final class OpenClKernelEmitter {
         };
     }
 
-    private void emitFunction(StringBuilder builder, ParsedGpuMethod parsedMethod, GpuIrMethod irMethod, String emittedName, boolean kernel) {
+    private void emitFunction(
+            StringBuilder builder,
+            ParsedGpuMethod parsedMethod,
+            GpuIrMethod irMethod,
+            String emittedName,
+            boolean kernel,
+            Map<String, String> helperNameIndex
+    ) {
         if (!kernel && parsedMethod.inline()) {
             builder.append("inline ");
         }
@@ -477,7 +488,9 @@ public final class OpenClKernelEmitter {
                 .append(parsedMethod.parameters().stream().map(this::emitParameter).collect(Collectors.joining(", ")))
                 .append(") {\n");
 
-        if (!kernel && !parsedMethod.nativeCode().isBlank()) {
+        if (!kernel && !parsedMethod.supportCondition().isBlank()) {
+            emitGuardedHelperBody(builder, parsedMethod, irMethod, helperNameIndex);
+        } else if (!kernel && !parsedMethod.nativeCode().isBlank()) {
             emitNativeCode(builder, parsedMethod.nativeCode(), 1);
         } else {
             EmissionContext context = new EmissionContext();
@@ -487,6 +500,110 @@ public final class OpenClKernelEmitter {
         }
 
         builder.append("}");
+    }
+
+    private void emitGuardedHelperBody(
+            StringBuilder builder,
+            ParsedGpuMethod parsedMethod,
+            GpuIrMethod irMethod,
+            Map<String, String> helperNameIndex
+    ) {
+        String supportGuard = emitSupportGuard(parsedMethod.supportCondition());
+        String callbackName = resolveCallbackHelperName(parsedMethod, helperNameIndex);
+
+        builder.append("#if ").append(supportGuard).append("\n");
+        emitHelperBody(builder, parsedMethod, irMethod);
+        builder.append("#else\n");
+        emitFallbackCallbackInvocation(builder, parsedMethod, callbackName, 1);
+        builder.append("#endif\n");
+    }
+
+    private void emitHelperBody(StringBuilder builder, ParsedGpuMethod parsedMethod, GpuIrMethod irMethod) {
+        if (!parsedMethod.nativeCode().isBlank()) {
+            emitNativeCode(builder, parsedMethod.nativeCode(), 1);
+            return;
+        }
+
+        EmissionContext context = new EmissionContext();
+        for (GpuIrStatement statement : irMethod.statements()) {
+            emitStatement(builder, statement, 1, context);
+        }
+    }
+
+    private void emitFallbackCallbackInvocation(
+            StringBuilder builder,
+            ParsedGpuMethod parsedMethod,
+            String callbackName,
+            int indent
+    ) {
+        String prefix = "    ".repeat(indent);
+        String invocation = callbackName + "(" + parsedMethod.parameters().stream()
+                .map(ParsedGpuParameter::name)
+                .collect(Collectors.joining(", ")) + ")";
+        builder.append(prefix);
+        if (!"void".equals(parsedMethod.returnType())) {
+            builder.append("return ");
+        }
+        builder.append(invocation).append(";\n");
+    }
+
+    private String resolveCallbackHelperName(ParsedGpuMethod parsedMethod, Map<String, String> helperNameIndex) {
+        String callbackName = helperNameIndex.get(helperSignatureKey(
+                parsedMethod.ownerQualifiedName(),
+                parsedMethod.ownerSimpleName(),
+                parsedMethod.callbackMethodName(),
+                parsedMethod.parameters().stream().map(ParsedGpuParameter::javaType).toList()
+        ));
+        if (callbackName == null) {
+            throw new IllegalArgumentException(
+                    "Guarded @CCode helper callback was not found in the same owner with the same parameter types: "
+                            + parsedMethod.callbackMethodName()
+            );
+        }
+        return callbackName;
+    }
+
+    private String emitSupportGuard(String supportCondition) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(?i)opencl_(\\d+)(?:[._](\\d+))?")
+                .matcher(supportCondition == null ? "" : supportCondition.strip());
+        if (!matcher.matches()) {
+            throw new IllegalArgumentException("Unsupported @CCode support condition for OpenCL emission: " + supportCondition);
+        }
+
+        int major = Integer.parseInt(matcher.group(1));
+        int minor = matcher.group(2) == null ? 0 : Integer.parseInt(matcher.group(2));
+        int openClVersion = (major * 100) + (minor * 10);
+        return "defined(__OPENCL_C_VERSION__) && (__OPENCL_C_VERSION__ >= " + openClVersion + ")";
+    }
+
+    private Map<String, String> buildHelperNameIndex(List<GpuIrCompiledMethod> helperMethods) {
+        Map<String, String> helperNameIndex = new HashMap<>();
+        for (GpuIrCompiledMethod helperMethod : helperMethods) {
+            ParsedGpuMethod parsedMethod = helperMethod.parsedMethod();
+            helperNameIndex.put(
+                    helperSignatureKey(
+                            parsedMethod.ownerQualifiedName(),
+                            parsedMethod.ownerSimpleName(),
+                            parsedMethod.name(),
+                            parsedMethod.parameters().stream().map(ParsedGpuParameter::javaType).toList()
+                    ),
+                    helperMethod.emittedName()
+            );
+        }
+        return helperNameIndex;
+    }
+
+    private String helperSignatureKey(
+            String ownerQualifiedName,
+            String ownerSimpleName,
+            String methodName,
+            List<String> argumentTypes
+    ) {
+        String owner = ownerQualifiedName != null && !ownerQualifiedName.isBlank()
+                ? ownerQualifiedName
+                : ownerSimpleName;
+        return owner + "#" + methodName + argumentTypes.stream().collect(Collectors.joining(",", "(", ")"));
     }
 
     private static final class EmissionContext {

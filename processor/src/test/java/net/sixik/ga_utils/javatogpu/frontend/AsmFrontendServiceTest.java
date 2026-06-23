@@ -222,6 +222,8 @@ class AsmFrontendServiceTest {
                 false,
                 List.of(),
                 "",
+                "",
+                "",
                 false
         );
     }

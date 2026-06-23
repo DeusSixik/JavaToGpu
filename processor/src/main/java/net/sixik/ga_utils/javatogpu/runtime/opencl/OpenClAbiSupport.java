@@ -159,6 +159,12 @@ final class OpenClAbiSupport {
         if (type.isPrimitive()) {
             return new OpenClScalarLayout(type.getName(), GpuTypeSupport.scalarByteSize(type.getName()));
         }
+        if (type.isArray()) {
+            throw new IllegalArgumentException(
+                    "Unsupported OpenCL field type for ABI marshalling: " + type.getName()
+                            + "; array fields inside @GPUStruct are not supported in the current OpenCL ABI"
+            );
+        }
         if (GpuTypeSupport.isSupportedVectorType(type.getName())) {
             return new OpenClVectorLayout(type.getName());
         }

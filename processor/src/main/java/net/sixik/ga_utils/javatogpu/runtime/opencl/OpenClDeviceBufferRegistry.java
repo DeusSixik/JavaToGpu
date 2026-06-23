@@ -20,6 +20,10 @@ public final class OpenClDeviceBufferRegistry {
         );
     }
 
+    void clear() {
+        handles.clear();
+    }
+
     int cacheSize() {
         return handles.size();
     }

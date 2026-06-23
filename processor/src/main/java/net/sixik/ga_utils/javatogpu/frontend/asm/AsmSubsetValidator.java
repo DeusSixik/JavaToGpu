@@ -34,6 +34,7 @@ import net.sixik.ga_utils.javatogpu.api.LongPtr;
 import net.sixik.ga_utils.javatogpu.api.Sampler;
 import net.sixik.ga_utils.javatogpu.api.ShortPtr;
 import net.sixik.ga_utils.javatogpu.api.UInt4;
+import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 import org.objectweb.asm.Handle;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -69,20 +70,7 @@ public final class AsmSubsetValidator {
             Type.getInternalName(IntPtr.class),
             Type.getInternalName(LongPtr.class),
             Type.getInternalName(FloatPtr.class),
-            Type.getInternalName(DoublePtr.class),
-            Type.getInternalName(Float2.class),
-            Type.getInternalName(Float3.class),
-            Type.getInternalName(Float4.class),
-            Type.getInternalName(Int2.class),
-            Type.getInternalName(Int3.class),
-            Type.getInternalName(Int4.class),
-            Type.getInternalName(UInt4.class),
-            Type.getInternalName(Long2.class),
-            Type.getInternalName(Long3.class),
-            Type.getInternalName(Long4.class),
-            Type.getInternalName(Double2.class),
-            Type.getInternalName(Double3.class),
-            Type.getInternalName(Double4.class)
+            Type.getInternalName(DoublePtr.class)
     );
 
     private static final Set<String> BUILTIN_VALUE_OWNERS = Set.of(
@@ -93,19 +81,6 @@ public final class AsmSubsetValidator {
             Type.getInternalName(LongPtr.class),
             Type.getInternalName(FloatPtr.class),
             Type.getInternalName(DoublePtr.class),
-            Type.getInternalName(Float2.class),
-            Type.getInternalName(Float3.class),
-            Type.getInternalName(Float4.class),
-            Type.getInternalName(Int2.class),
-            Type.getInternalName(Int3.class),
-            Type.getInternalName(Int4.class),
-            Type.getInternalName(UInt4.class),
-            Type.getInternalName(Long2.class),
-            Type.getInternalName(Long3.class),
-            Type.getInternalName(Long4.class),
-            Type.getInternalName(Double2.class),
-            Type.getInternalName(Double3.class),
-            Type.getInternalName(Double4.class),
             Type.getInternalName(Image1DReadOnly.class),
             Type.getInternalName(Image1DWriteOnly.class),
             Type.getInternalName(Image1DArrayReadOnly.class),
@@ -638,11 +613,15 @@ public final class AsmSubsetValidator {
     }
 
     private boolean isAllowedConstructorOwner(String ownerInternalName, AsmValidationConfig config) {
-        return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName) || config.allowedStructOwners().contains(ownerInternalName);
+        return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName)
+                || isBuiltInVectorOwner(ownerInternalName)
+                || config.allowedStructOwners().contains(ownerInternalName);
     }
 
     private boolean isAllowedFieldOwner(String ownerInternalName, AsmValidationConfig config) {
-        return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName) || config.allowedStructOwners().contains(ownerInternalName);
+        return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName)
+                || isBuiltInVectorOwner(ownerInternalName)
+                || config.allowedStructOwners().contains(ownerInternalName);
     }
 
     private boolean isSupportedValueType(Type type, AsmValidationConfig config, boolean allowArrays) {
@@ -667,11 +646,19 @@ public final class AsmSubsetValidator {
     }
 
     private boolean isSupportedObjectType(String ownerInternalName, AsmValidationConfig config) {
-        return BUILTIN_VALUE_OWNERS.contains(ownerInternalName) || config.allowedStructOwners().contains(ownerInternalName);
+        return BUILTIN_VALUE_OWNERS.contains(ownerInternalName)
+                || isBuiltInVectorOwner(ownerInternalName)
+                || config.allowedStructOwners().contains(ownerInternalName);
     }
 
     private boolean isAllowedArrayObjectElementOwner(String ownerInternalName, AsmValidationConfig config) {
-        return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName) || config.allowedStructOwners().contains(ownerInternalName);
+        return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName)
+                || isBuiltInVectorOwner(ownerInternalName)
+                || config.allowedStructOwners().contains(ownerInternalName);
+    }
+
+    private boolean isBuiltInVectorOwner(String ownerInternalName) {
+        return GpuTypeSupport.isSupportedVectorClassName(ownerInternalName.replace('/', '.'));
     }
 
     private void fail(

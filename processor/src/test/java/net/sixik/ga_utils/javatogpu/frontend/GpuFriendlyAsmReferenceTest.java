@@ -231,6 +231,8 @@ class GpuFriendlyAsmReferenceTest {
                 false,
                 List.of(),
                 "",
+                "",
+                "",
                 false
         );
     }

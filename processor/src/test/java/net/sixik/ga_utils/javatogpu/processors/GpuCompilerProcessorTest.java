@@ -3762,6 +3762,120 @@ class GpuCompilerProcessorTest {
     }
 
     @Test
+    void generatesKernelWithAnnotatedUInt3VectorType() throws IOException {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path classOutputDir = Files.createTempDirectory("javatogpu-uint3-classes");
+        Path generatedOutputDir = Files.createTempDirectory("javatogpu-uint3-generated");
+
+        String source = """
+                package sample;
+
+                import net.sixik.ga_utils.javatogpu.api.GPU;
+                import net.sixik.ga_utils.javatogpu.api.UInt3;
+                import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+
+                public class Demo {
+                    @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+                    static void kernel(UInt3 bias, @GPUGlobal int[] output) {
+                        int id = GPU.get_global_id(0);
+                        UInt3 local = new UInt3(1, 2, 3);
+                        output[id] = bias.x + bias.y + bias.z + local.x + local.y + local.z;
+                    }
+                }
+                """;
+
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
+            List<String> options = List.of(
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-d", classOutputDir.toString(),
+                    "-s", generatedOutputDir.toString()
+            );
+            JavaFileObject sourceFile = new StringJavaFileObject("sample.Demo", source);
+            JavaCompiler.CompilationTask task = compiler.getTask(
+                    null,
+                    fileManager,
+                    null,
+                    options,
+                    null,
+                    List.of(sourceFile)
+            );
+            task.setProcessors(List.of(new GpuCompilerProcessor()));
+
+            assertTrue(task.call());
+        }
+
+        Path kernelPath = generatedOutputDir.resolve("javatogpu/sample/Demo/kernel.cl");
+        assertTrue(Files.exists(kernelPath));
+        assertEquals("""
+                __kernel void jtg_kernel(uint3 bias, __global int* output) {
+                    int id = get_global_id(0);
+                    uint3 local = (uint3)(1, 2, 3);
+                    output[id] = (((((bias.x + bias.y) + bias.z) + local.x) + local.y) + local.z);
+                }""", Files.readString(kernelPath));
+    }
+
+    @Test
+    void generatesKernelWithGuardedCCodeCallbackFallback() throws IOException {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path classOutputDir = Files.createTempDirectory("javatogpu-ccode-guard-classes");
+        Path generatedOutputDir = Files.createTempDirectory("javatogpu-ccode-guard-generated");
+
+        String source = """
+                package sample;
+
+                import net.sixik.ga_utils.javatogpu.api.GPU;
+                import net.sixik.ga_utils.javatogpu.api.anotations.CCode;
+                import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+
+                public class Demo {
+                    @CCode(support = "OpenCL_3", callback = "fallbackAdd")
+                    static float preferredAdd(float a, float b) {
+                        return a - b;
+                    }
+
+                    @CCode
+                    static float fallbackAdd(float a, float b) {
+                        return a + b;
+                    }
+
+                    @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+                    static void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                        int id = GPU.get_global_id(0);
+                        output[id] = preferredAdd(input[id], 2.0f);
+                    }
+                }
+                """;
+
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
+            List<String> options = List.of(
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-d", classOutputDir.toString(),
+                    "-s", generatedOutputDir.toString()
+            );
+            JavaFileObject sourceFile = new StringJavaFileObject("sample.Demo", source);
+            JavaCompiler.CompilationTask task = compiler.getTask(
+                    null,
+                    fileManager,
+                    null,
+                    options,
+                    null,
+                    List.of(sourceFile)
+            );
+            task.setProcessors(List.of(new GpuCompilerProcessor()));
+
+            assertTrue(task.call());
+        }
+
+        Path kernelPath = generatedOutputDir.resolve("javatogpu/sample/Demo/kernel.cl");
+        assertTrue(Files.exists(kernelPath));
+        String kernel = Files.readString(kernelPath);
+        assertTrue(kernel.contains("#if defined(__OPENCL_C_VERSION__) && (__OPENCL_C_VERSION__ >= 300)"));
+        assertTrue(kernel.contains("return (a - b);"));
+        assertTrue(kernel.contains("return jtg_fn_Demo_fallbackAdd_float_float(a, b);"));
+        assertTrue(kernel.contains("output[id] = jtg_fn_Demo_preferredAdd_float_float(input[id], 2.0F);"));
+    }
+
+    @Test
     void generatesKernelWithStructKernelParameter() throws IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         Path classOutputDir = Files.createTempDirectory("javatogpu-struct-param-classes");
@@ -3827,6 +3941,63 @@ class GpuCompilerProcessorTest {
         String launcherSource = Files.readString(launcherSourcePath);
         assertTrue(launcherSource.contains("new net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor(\"sample\", \"sample.Sample\", net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess.VALUE)"));
         assertTrue(launcherSource.contains("public static void invoke(java.lang.Object sample, float[] output)"));
+    }
+
+    @Test
+    void rejectsStructFieldArraysBeforeRuntimeAbiMarshalling() throws IOException {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        Path classOutputDir = Files.createTempDirectory("javatogpu-struct-array-field-classes");
+        Path generatedOutputDir = Files.createTempDirectory("javatogpu-struct-array-field-generated");
+        DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+
+        String source = """
+                package sample;
+
+                import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
+                import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
+
+                @GPUStruct
+                class Child {
+                    public double value;
+                }
+
+                @GPUStruct
+                class Parent {
+                    public Child[] children;
+                    public double[] amplitudes;
+                }
+
+                public class Demo {
+                    @net.sixik.ga_utils.javatogpu.api.anotations.GPU
+                    static void kernel(Parent parent, @GPUGlobal double[] output) {
+                        output[0] = 1.0;
+                    }
+                }
+                """;
+
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null)) {
+            List<String> options = List.of(
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-d", classOutputDir.toString(),
+                    "-s", generatedOutputDir.toString()
+            );
+            JavaFileObject sourceFile = new StringJavaFileObject("sample.Demo", source);
+            JavaCompiler.CompilationTask task = compiler.getTask(
+                    null,
+                    fileManager,
+                    diagnostics,
+                    options,
+                    null,
+                    List.of(sourceFile)
+            );
+            task.setProcessors(List.of(new GpuCompilerProcessor()));
+
+            assertFalse(task.call());
+        }
+
+        assertTrue(diagnostics.getDiagnostics().stream().map(diagnostic -> diagnostic.getMessage(null)).anyMatch(message ->
+                String.valueOf(message).contains("Unsupported @GPUStruct field type: Child[]; arrays are not supported inside @GPUStruct fields in the current OpenCL ABI")
+        ));
     }
 
     @Test

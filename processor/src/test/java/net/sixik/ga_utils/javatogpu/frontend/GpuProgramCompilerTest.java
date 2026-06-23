@@ -145,6 +145,8 @@ class GpuProgramCompilerTest {
                 false,
                 List.of(),
                 "",
+                "",
+                "",
                 false
         );
     }

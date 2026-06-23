@@ -1,11 +1,14 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUVectorType;
+
 /**
  * Java-side representation of the OpenCL {@code uint4} vector type.
  *
  * <p>Java has no unsigned {@code int}, so every component is stored as a regular {@code int} carrying the raw
  * 32-bit value.
  */
+@GPUVectorType(openClType = "uint4", componentType = "int", fields = {"x", "y", "z", "w"})
 public class UInt4 {
 
     /**

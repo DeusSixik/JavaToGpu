@@ -1,8 +1,11 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUVectorType;
+
 /**
  * Java-side representation of the OpenCL {@code double4} vector type.
  */
+@GPUVectorType(openClType = "double4", componentType = "double", fields = {"x", "y", "z", "w"})
 public class Double4 {
 
     /**

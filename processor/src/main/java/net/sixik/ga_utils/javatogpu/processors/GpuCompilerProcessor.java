@@ -55,6 +55,7 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -239,12 +240,14 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             ParsedGpuMethod kernelMethod,
             ExecutableElement kernelElement
     ) {
+        Set<String> reachableOwners = new LinkedHashSet<>(extractScopedHelperOwners(kernelMethod));
         List<ParsedGpuMethod> currentHelpers = roundEnv.getElementsAnnotatedWith(CCode.class).stream()
                 .filter(element -> element.getKind() == ElementKind.METHOD)
                 .map(ExecutableElement.class::cast)
                 .filter(candidate -> !candidate.equals(kernelElement))
                 .filter(this::isSupportedHelperMethod)
                 .map(this::parseMethod)
+                .filter(helper -> isReachableHelperOwner(helper, reachableOwners))
                 .toList();
 
         Map<String, ParsedGpuMethod> helpers = new LinkedHashMap<>();
@@ -294,6 +297,15 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         }
 
         return List.copyOf(loadedHelpers.values());
+    }
+
+    private boolean isReachableHelperOwner(ParsedGpuMethod helper, Set<String> reachableOwners) {
+        if (reachableOwners.isEmpty()) {
+            return false;
+        }
+        return reachableOwners.contains(helper.ownerSimpleName())
+                || reachableOwners.contains(helper.ownerQualifiedName())
+                || reachableOwners.contains(lastScopeSegment(helper.ownerQualifiedName()));
     }
 
     private List<ParsedGpuMethod> loadClasspathIntrinsics(

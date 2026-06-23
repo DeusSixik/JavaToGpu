@@ -1,5 +1,6 @@
 package net.sixik.ga_utils.javatogpu.frontend;
 
+import com.github.javaparser.ast.type.Type;
 import net.sixik.ga_utils.javatogpu.frontend.opencl.OpenClKernelEmitter;
 import net.sixik.ga_utils.javatogpu.frontend.ir.model.GpuIrCompiledMethod;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
@@ -9,9 +10,17 @@ import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser;
 import net.sixik.ga_utils.javatogpu.frontend.validation.GpuSubsetValidator;
+import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public final class GpuFrontendService {
 
@@ -80,9 +89,11 @@ public final class GpuFrontendService {
             List<ParsedGpuMethod> helperMethods,
             List<ParsedGpuStruct> structs
     ) {
-        validator.validateKernel(kernelMethod, helperMethods, structs);
+        List<ParsedGpuStruct> relevantStructs = selectRelevantStructs(kernelMethod, helperMethods, structs);
 
-        List<GpuIrCompiledMethod> compiledMethods = lowerer.lower(kernelMethod, helperMethods, structs);
+        validator.validateKernel(kernelMethod, helperMethods, relevantStructs);
+
+        List<GpuIrCompiledMethod> compiledMethods = lowerer.lower(kernelMethod, helperMethods, relevantStructs);
         List<GpuIrCompiledMethod> compiledHelpers = compiledMethods.subList(0, helperMethods.size());
         GpuIrCompiledMethod compiledKernel = compiledMethods.get(compiledMethods.size() - 1);
         return emitter.emitProgram(
@@ -93,7 +104,101 @@ public final class GpuFrontendService {
                         "Lowered kernel references unknown helper: ",
                         "Recursive @CCode helper calls are not supported: "
                 ),
-                structs
+                relevantStructs
         );
+    }
+
+    private List<ParsedGpuStruct> selectRelevantStructs(
+            ParsedGpuMethod kernelMethod,
+            List<ParsedGpuMethod> helperMethods,
+            List<ParsedGpuStruct> structs
+    ) {
+        if (structs.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, ParsedGpuStruct> registry = buildStructAliasRegistry(structs);
+        LinkedHashSet<String> reachableStructNames = new LinkedHashSet<>();
+
+        registerMethodStructReferences(kernelMethod, registry, reachableStructNames);
+        helperMethods.forEach(helperMethod -> registerMethodStructReferences(helperMethod, registry, reachableStructNames));
+
+        Deque<String> pending = new ArrayDeque<>(reachableStructNames);
+        while (!pending.isEmpty()) {
+            String structName = pending.removeFirst();
+            ParsedGpuStruct struct = registry.get(structName);
+            if (struct == null) {
+                continue;
+            }
+
+            for (String nestedStructName : referencedStructNames(struct.fields().stream().map(field -> field.javaType()).toList(), registry)) {
+                if (reachableStructNames.add(nestedStructName)) {
+                    pending.addLast(nestedStructName);
+                }
+            }
+        }
+
+        return structs.stream()
+                .filter(struct -> reachableStructNames.contains(struct.ownerQualifiedName())
+                        || reachableStructNames.contains(struct.ownerSimpleName())
+                        || reachableStructNames.contains(GpuTypeSupport.simpleTypeName(struct.ownerSimpleName())))
+                .toList();
+    }
+
+    private void registerMethodStructReferences(
+            ParsedGpuMethod method,
+            Map<String, ParsedGpuStruct> registry,
+            Set<String> reachableStructNames
+    ) {
+        List<String> referencedTypes = new ArrayList<>();
+        referencedTypes.add(method.returnType());
+        method.parameters().forEach(parameter -> referencedTypes.add(parameter.javaType()));
+        if (method.declaration() != null) {
+            method.declaration().findAll(Type.class).forEach(type -> referencedTypes.add(type.asString()));
+        }
+        reachableStructNames.addAll(referencedStructNames(referencedTypes, registry));
+    }
+
+    private Set<String> referencedStructNames(List<String> referencedTypes, Map<String, ParsedGpuStruct> registry) {
+        LinkedHashSet<String> structNames = new LinkedHashSet<>();
+        for (String referencedType : referencedTypes) {
+            String normalizedType = normalizeReferencedType(referencedType);
+            if (normalizedType == null) {
+                continue;
+            }
+            ParsedGpuStruct struct = registry.get(normalizedType);
+            if (struct != null) {
+                structNames.add(struct.ownerQualifiedName());
+            }
+        }
+        return structNames;
+    }
+
+    private String normalizeReferencedType(String typeName) {
+        if (typeName == null || typeName.isBlank()) {
+            return null;
+        }
+        String normalized = GpuTypeSupport.declaredType(typeName.strip());
+        while (GpuTypeSupport.isArrayType(normalized)) {
+            normalized = GpuTypeSupport.componentType(normalized);
+        }
+        return normalized;
+    }
+
+    private Map<String, ParsedGpuStruct> buildStructAliasRegistry(List<ParsedGpuStruct> structs) {
+        Map<String, ParsedGpuStruct> registry = new LinkedHashMap<>();
+        for (ParsedGpuStruct struct : structs) {
+            registerStructAlias(registry, struct.ownerQualifiedName(), struct);
+            registerStructAlias(registry, struct.ownerSimpleName(), struct);
+            registerStructAlias(registry, GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()), struct);
+        }
+        return registry;
+    }
+
+    private void registerStructAlias(Map<String, ParsedGpuStruct> registry, String alias, ParsedGpuStruct struct) {
+        if (alias == null || alias.isBlank()) {
+            return;
+        }
+        registry.putIfAbsent(alias, struct);
     }
 }

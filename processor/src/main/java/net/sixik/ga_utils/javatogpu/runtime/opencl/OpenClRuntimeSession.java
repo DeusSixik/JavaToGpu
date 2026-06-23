@@ -23,6 +23,9 @@ import net.sixik.ga_utils.javatogpu.api.Image3DWriteOnly;
 import net.sixik.ga_utils.javatogpu.api.Sampler;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.opencl.CL10;
 import org.lwjgl.opencl.CL12;
@@ -31,6 +34,8 @@ import org.lwjgl.opencl.CLImageFormat;
 import org.lwjgl.system.MemoryStack;
 
 public final class OpenClRuntimeSession implements AutoCloseable {
+
+    private static final Pattern OPENCL_VERSION_PATTERN = Pattern.compile("OpenCL\\s+(\\d+)\\.(\\d+)");
 
     private final OpenClDevice device;
     private final OpenClContext context;
@@ -57,6 +62,21 @@ public final class OpenClRuntimeSession implements AutoCloseable {
         OpenClProgram program = context.buildProgram(descriptor.kernelSource());
         OpenClKernel kernel = program.createKernel(descriptor.kernelName());
         return new OpenClCompiledKernel(descriptor, descriptor.kernelResource(), program, kernel);
+    }
+
+    public OpenClRuntimeCapabilities capabilities() {
+        long deviceHandle = device.device();
+        String extensions = queryStringDeviceInfo(deviceHandle, CL10.CL_DEVICE_EXTENSIONS);
+        String deviceVersion = queryStringDeviceInfo(deviceHandle, CL10.CL_DEVICE_VERSION);
+        return new OpenClRuntimeCapabilities(
+                device.label(),
+                deviceVersion,
+                supportsDoublePrecision(extensions),
+                queryIntDeviceInfo(deviceHandle, CL10.CL_DEVICE_IMAGE_SUPPORT) != 0,
+                supportsImage3dWrites(extensions, deviceVersion),
+                device.localMemoryBytes(),
+                device.maxWorkGroupSize()
+        );
     }
 
     public OpenClBuffer createReadWriteBuffer(long sizeBytes) {
@@ -619,6 +639,70 @@ public final class OpenClRuntimeSession implements AutoCloseable {
 
     public OpenClCommandQueue queue() {
         return queue;
+    }
+
+    private int queryIntDeviceInfo(long deviceHandle, int paramName) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            ByteBuffer buffer = stack.malloc(Integer.BYTES);
+            OpenClException.check(
+                    CL10.clGetDeviceInfo(deviceHandle, paramName, buffer, null),
+                    "clGetDeviceInfo"
+            );
+            return buffer.getInt(0);
+        }
+    }
+
+    private String queryStringDeviceInfo(long deviceHandle, int paramName) {
+        try (MemoryStack stack = MemoryStack.stackPush()) {
+            PointerBuffer sizeBuffer = stack.mallocPointer(1);
+            OpenClException.check(
+                    CL10.clGetDeviceInfo(deviceHandle, paramName, (ByteBuffer) null, sizeBuffer),
+                    "clGetDeviceInfo"
+            );
+            int size = Math.toIntExact(sizeBuffer.get(0));
+            ByteBuffer buffer = stack.malloc(size);
+            OpenClException.check(
+                    CL10.clGetDeviceInfo(deviceHandle, paramName, buffer, null),
+                    "clGetDeviceInfo"
+            );
+
+            int length = size;
+            while (length > 0 && buffer.get(length - 1) == 0) {
+                length--;
+            }
+            byte[] bytes = new byte[length];
+            buffer.get(0, bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
+        }
+    }
+
+    private boolean supportsDoublePrecision(String extensions) {
+        return containsExtension(extensions, "cl_khr_fp64") || containsExtension(extensions, "cl_amd_fp64");
+    }
+
+    private boolean supportsImage3dWrites(String extensions, String deviceVersion) {
+        if (containsExtension(extensions, "cl_khr_3d_image_writes")) {
+            return true;
+        }
+        Matcher matcher = OPENCL_VERSION_PATTERN.matcher(deviceVersion == null ? "" : deviceVersion);
+        if (!matcher.find()) {
+            return false;
+        }
+        int major = Integer.parseInt(matcher.group(1));
+        int minor = Integer.parseInt(matcher.group(2));
+        return major > 1 || (major == 1 && minor >= 2);
+    }
+
+    private boolean containsExtension(String extensions, String extension) {
+        if (extensions == null || extensions.isBlank()) {
+            return false;
+        }
+        for (String token : extensions.split("\\s+")) {
+            if (extension.equals(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

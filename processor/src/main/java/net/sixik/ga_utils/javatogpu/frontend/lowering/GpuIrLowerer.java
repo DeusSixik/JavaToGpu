@@ -141,11 +141,22 @@ public final class GpuIrLowerer {
                 method.name(),
                 method.parameters().stream().map(parameter -> parameter.javaType()).toList()
         );
+        LinkedHashSet<String> helperDependencies = new LinkedHashSet<>(collectHelperDependencies(loweredMethod));
+        if (!kernelEntry && !method.callbackMethodName().isBlank()) {
+            HelperDescriptor callbackHelper = resolveSameOwnerCallbackHelper(method, helperRegistry);
+            if (callbackHelper == null) {
+                throw new IllegalArgumentException(
+                        "Guarded @CCode helper callback was not found in the same owner with the same parameter types: "
+                                + method.callbackMethodName()
+                );
+            }
+            helperDependencies.add(callbackHelper.emittedName());
+        }
         return new GpuIrCompiledMethod(
                 method,
                 loweredMethod,
                 emittedName,
-                List.copyOf(collectHelperDependencies(loweredMethod))
+                List.copyOf(helperDependencies)
         );
     }
 
@@ -1235,6 +1246,25 @@ public final class GpuIrLowerer {
                     ));
         }
         return helperRegistry;
+    }
+
+    private HelperDescriptor resolveSameOwnerCallbackHelper(
+            ParsedGpuMethod helperMethod,
+            Map<HelperSignature, List<HelperDescriptor>> helperRegistry
+    ) {
+        HelperSignature signature = new HelperSignature(
+                helperMethod.callbackMethodName(),
+                helperMethod.parameters().stream().map(parameter -> parameter.javaType()).toList()
+        );
+        return helperRegistry.getOrDefault(signature, List.of()).stream()
+                .filter(candidate -> sameOwner(
+                        candidate.ownerSimpleName(),
+                        candidate.ownerQualifiedName(),
+                        helperMethod.ownerSimpleName(),
+                        helperMethod.ownerQualifiedName()
+                ))
+                .findFirst()
+                .orElse(null);
     }
 
     private Set<String> collectHelperDependencies(GpuIrMethod method) {

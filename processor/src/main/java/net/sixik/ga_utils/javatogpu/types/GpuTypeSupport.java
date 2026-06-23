@@ -1,10 +1,16 @@
 package net.sixik.ga_utils.javatogpu.types;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUVectorType;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class GpuTypeSupport {
+
+    private static final String API_PACKAGE_PREFIX = "net.sixik.ga_utils.javatogpu.api.";
 
     private static final String POINTER_REFERENCE_SUFFIX = "&";
 
@@ -35,21 +41,7 @@ public final class GpuTypeSupport {
             "DoublePtr", "double"
     );
 
-    private static final Map<String, VectorDescriptor> SUPPORTED_VECTOR_TYPES = Map.ofEntries(
-            Map.entry("Float2", new VectorDescriptor("float2", "float", List.of("x", "y"))),
-            Map.entry("Float3", new VectorDescriptor("float3", "float", List.of("x", "y", "z"))),
-            Map.entry("Float4", new VectorDescriptor("float4", "float", List.of("x", "y", "z", "w"))),
-            Map.entry("Int2", new VectorDescriptor("int2", "int", List.of("x", "y"))),
-            Map.entry("Int3", new VectorDescriptor("int3", "int", List.of("x", "y", "z"))),
-            Map.entry("Int4", new VectorDescriptor("int4", "int", List.of("x", "y", "z", "w"))),
-            Map.entry("UInt4", new VectorDescriptor("uint4", "int", List.of("x", "y", "z", "w"))),
-            Map.entry("Long2", new VectorDescriptor("long2", "long", List.of("x", "y"))),
-            Map.entry("Long3", new VectorDescriptor("long3", "long", List.of("x", "y", "z"))),
-            Map.entry("Long4", new VectorDescriptor("long4", "long", List.of("x", "y", "z", "w"))),
-            Map.entry("Double2", new VectorDescriptor("double2", "double", List.of("x", "y"))),
-            Map.entry("Double3", new VectorDescriptor("double3", "double", List.of("x", "y", "z"))),
-            Map.entry("Double4", new VectorDescriptor("double4", "double", List.of("x", "y", "z", "w")))
-    );
+    private static final Map<String, VectorDescriptor> SUPPORTED_VECTOR_TYPES = new ConcurrentHashMap<>();
 
     private static final Map<String, String> SUPPORTED_IMAGE_AND_SAMPLER_TYPES = Map.ofEntries(
             Map.entry("Image1DReadOnly", "read_only image1d_t"),
@@ -68,6 +60,46 @@ public final class GpuTypeSupport {
     );
 
     private GpuTypeSupport() {
+    }
+
+    public static void registerAnnotatedVectorType(Class<?> vectorType) {
+        if (vectorType == null) {
+            throw new IllegalArgumentException("vectorType cannot be null");
+        }
+        GPUVectorType annotation = vectorType.getAnnotation(GPUVectorType.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Type is not annotated with @GPUVectorType: " + vectorType.getName());
+        }
+
+        List<String> fieldNames = List.of(annotation.fields());
+        if (fieldNames.isEmpty()) {
+            throw new IllegalArgumentException("@GPUVectorType fields() must not be empty: " + vectorType.getName());
+        }
+
+        int storageWidth = annotation.storageWidth() > 0
+                ? annotation.storageWidth()
+                : defaultVectorStorageWidth(fieldNames.size());
+        if (storageWidth < fieldNames.size()) {
+            throw new IllegalArgumentException(
+                    "@GPUVectorType storageWidth() cannot be smaller than the declared field count: " + vectorType.getName()
+            );
+        }
+
+        VectorDescriptor descriptor = new VectorDescriptor(
+                annotation.openClType(),
+                annotation.componentType(),
+                fieldNames,
+                storageWidth
+        );
+        registerVectorAlias(vectorType.getSimpleName(), descriptor);
+        registerVectorAlias(vectorType.getName(), descriptor);
+    }
+
+    public static boolean isSupportedVectorClassName(String className) {
+        if (className == null || className.isBlank()) {
+            return false;
+        }
+        return vectorDescriptor(className) != null;
     }
 
     public static boolean isSupportedScalarType(String javaType) {
@@ -222,8 +254,11 @@ public final class GpuTypeSupport {
     }
 
     public static int vectorStorageWidth(String javaType) {
-        int width = vectorWidth(javaType);
-        return width == 3 ? 4 : width;
+        VectorDescriptor descriptor = vectorDescriptor(javaType);
+        if (descriptor == null) {
+            throw new IllegalArgumentException("Unsupported vector type: " + javaType);
+        }
+        return descriptor.storageWidth();
     }
 
     public static String openClVectorTypeName(String javaType) {
@@ -312,7 +347,55 @@ public final class GpuTypeSupport {
         if (declaredType == null) {
             return null;
         }
+        VectorDescriptor descriptor = SUPPORTED_VECTOR_TYPES.get(declaredType);
+        if (descriptor != null) {
+            return descriptor;
+        }
+
+        descriptor = SUPPORTED_VECTOR_TYPES.get(simpleTypeName(declaredType));
+        if (descriptor != null) {
+            return descriptor;
+        }
+
+        tryRegisterAnnotatedVectorType(declaredType);
+        descriptor = SUPPORTED_VECTOR_TYPES.get(declaredType);
+        if (descriptor != null) {
+            return descriptor;
+        }
         return SUPPORTED_VECTOR_TYPES.get(simpleTypeName(declaredType));
+    }
+
+    private static void registerVectorAlias(String alias, VectorDescriptor descriptor) {
+        if (alias == null || alias.isBlank()) {
+            return;
+        }
+        SUPPORTED_VECTOR_TYPES.putIfAbsent(alias, descriptor);
+    }
+
+    private static void tryRegisterAnnotatedVectorType(String declaredType) {
+        for (String candidate : candidateVectorClassNames(declaredType)) {
+            try {
+                Class<?> type = Class.forName(candidate, false, GpuTypeSupport.class.getClassLoader());
+                if (type.isAnnotationPresent(GPUVectorType.class)) {
+                    registerAnnotatedVectorType(type);
+                }
+            } catch (ClassNotFoundException ignored) {
+                // Best effort lookup for optional vector extensions.
+            }
+        }
+    }
+
+    private static List<String> candidateVectorClassNames(String declaredType) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(declaredType);
+        if (!declaredType.contains(".")) {
+            candidates.add(API_PACKAGE_PREFIX + declaredType);
+        }
+        return candidates;
+    }
+
+    private static int defaultVectorStorageWidth(int width) {
+        return width == 3 ? 4 : width;
     }
 
     private static boolean sameVectorType(String leftType, String rightType) {
@@ -337,7 +420,8 @@ public final class GpuTypeSupport {
     private record VectorDescriptor(
             String openClTypeName,
             String componentType,
-            List<String> fieldNames
+            List<String> fieldNames,
+            int storageWidth
     ) {
     }
 

@@ -124,8 +124,10 @@ public final class GpuSubsetValidator {
         List<GpuValidationIssue> issues = new ArrayList<>();
         validateOpenClAttributes(kernelMethod, helperMethods, structs, issues);
         Map<HelperSignature, List<HelperDescriptor>> helperRegistry = buildHelperRegistry(helperMethods, issues);
+        validateGuardedHelperCallbacks(helperMethods, helperRegistry, issues);
         Map<String, List<ConstantDescriptor>> constantRegistry = buildConstantRegistry(kernelMethod, helperMethods, structs, issues);
         Map<String, StructDescriptor> structRegistry = buildStructRegistry(structs, issues);
+        validateStructFieldTypes(structs, structRegistry, issues);
 
         helperMethods.forEach(helperMethod -> validateMethod(helperMethod, helperRegistry, constantRegistry, structRegistry, issues, false));
         validateMethod(kernelMethod, helperRegistry, constantRegistry, structRegistry, issues, true);
@@ -179,6 +181,12 @@ public final class GpuSubsetValidator {
                 return;
             }
         } else {
+            boolean hasSupport = !method.supportCondition().isBlank();
+            boolean hasCallback = !method.callbackMethodName().isBlank();
+            if (hasSupport != hasCallback) {
+                issues.add(issue(method.declaration(), "@CCode helpers must declare both support = \"...\" and callback = \"...\" together"));
+                return;
+            }
             if (hasBody && hasNativeCode) {
                 issues.add(issue(method.declaration(), "@CCode helpers must use either a Java body or code = \"...\", not both"));
                 return;
@@ -198,6 +206,36 @@ public final class GpuSubsetValidator {
         method.declaration().getBody().ifPresent(body ->
                 body.getStatements().forEach(statement -> validateStatement(statement, issues, scopes, context))
         );
+    }
+
+    private void validateGuardedHelperCallbacks(
+            List<ParsedGpuMethod> helperMethods,
+            Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
+            List<GpuValidationIssue> issues
+    ) {
+        for (ParsedGpuMethod helperMethod : helperMethods) {
+            if (helperMethod.callbackMethodName().isBlank()) {
+                continue;
+            }
+
+            HelperDescriptor callback = resolveSameOwnerCallbackHelper(helperMethod, helperRegistry);
+            if (callback == null) {
+                issues.add(issue(
+                        helperMethod.declaration(),
+                        "Guarded @CCode helper callback was not found in the same owner with the same parameter types: "
+                                + helperMethod.callbackMethodName()
+                ));
+                continue;
+            }
+
+            if (!helperMethod.returnType().equals(callback.returnType())) {
+                issues.add(issue(
+                        helperMethod.declaration(),
+                        "Guarded @CCode helper callback must have the same return type as the guarded helper: "
+                                + helperMethod.callbackMethodName()
+                ));
+            }
+        }
     }
 
     private void validateReturnType(
@@ -237,14 +275,6 @@ public final class GpuSubsetValidator {
     ) {
         method.parameters().forEach(parameter -> {
             String type = parameter.javaType();
-            if (!kernelEntry && parameter.addressSpace() != GpuAddressSpace.PRIVATE) {
-                issues.add(new GpuValidationIssue(
-                        1,
-                        1,
-                        "Address space annotations are only supported on @GPU entry parameters: " + parameter.name()
-                ));
-                return;
-            }
             boolean supported = kernelEntry
                     ? GpuTypeSupport.isSupportedKernelParameterType(type)
                     || GpuTypeSupport.isSupportedVectorType(type)
@@ -404,6 +434,38 @@ public final class GpuSubsetValidator {
                 }
                 validateUniqueAttribute(null, attribute, seenFieldAttributes, issues, "Duplicate OpenCL attribute on @GPUStruct field: " + attribute.name());
                 validateSinglePositiveIntegerAttribute(null, attribute, issues, "@GPUStruct field aligned(...) requires a single positive integer");
+            }
+        }
+    }
+
+    private void validateStructFieldTypes(
+            List<ParsedGpuStruct> structs,
+            Map<String, StructDescriptor> structRegistry,
+            List<GpuValidationIssue> issues
+    ) {
+        for (ParsedGpuStruct struct : structs) {
+            for (ParsedGpuStructField field : struct.fields()) {
+                String fieldType = field.javaType();
+                if (GpuTypeSupport.isArrayType(fieldType)) {
+                    issues.add(new GpuValidationIssue(
+                            1,
+                            1,
+                            "Unsupported @GPUStruct field type: " + fieldType
+                                    + "; arrays are not supported inside @GPUStruct fields in the current OpenCL ABI"
+                    ));
+                    continue;
+                }
+                if (GpuTypeSupport.isSupportedScalarType(fieldType)
+                        || GpuTypeSupport.isSupportedVectorType(fieldType)
+                        || isStructType(fieldType, structRegistry)) {
+                    continue;
+                }
+                issues.add(new GpuValidationIssue(
+                        1,
+                        1,
+                        "Unsupported @GPUStruct field type: " + fieldType
+                                + "; use primitive fields, vector fields, or nested @GPUStruct values"
+                ));
             }
         }
     }
@@ -1554,6 +1616,25 @@ public final class GpuSubsetValidator {
             candidates.add(descriptor);
         }
         return helperRegistry;
+    }
+
+    private HelperDescriptor resolveSameOwnerCallbackHelper(
+            ParsedGpuMethod helperMethod,
+            Map<HelperSignature, List<HelperDescriptor>> helperRegistry
+    ) {
+        HelperSignature signature = new HelperSignature(
+                helperMethod.callbackMethodName(),
+                helperMethod.parameters().stream().map(parameter -> parameter.javaType()).toList()
+        );
+        return helperRegistry.getOrDefault(signature, List.of()).stream()
+                .filter(candidate -> sameOwner(
+                        candidate.ownerSimpleName(),
+                        candidate.ownerQualifiedName(),
+                        helperMethod.ownerSimpleName(),
+                        helperMethod.ownerQualifiedName()
+                ))
+                .findFirst()
+                .orElse(null);
     }
 
     private Map<String, List<ConstantDescriptor>> buildConstantRegistry(

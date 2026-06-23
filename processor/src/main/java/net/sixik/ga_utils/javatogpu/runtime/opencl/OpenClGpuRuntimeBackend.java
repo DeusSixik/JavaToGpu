@@ -17,9 +17,15 @@ import net.sixik.ga_utils.javatogpu.api.Image2DWriteOnly;
 import net.sixik.ga_utils.javatogpu.api.Image3DReadOnly;
 import net.sixik.ga_utils.javatogpu.api.Image3DWriteOnly;
 import net.sixik.ga_utils.javatogpu.api.Sampler;
+import net.sixik.ga_utils.javatogpu.api.GpuBackendTarget;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeApiVersion;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeBackendReport;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeFeature;
+import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelInvocation;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeBackend;
+import java.util.Objects;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.nio.ByteBuffer;
@@ -29,26 +35,158 @@ import java.nio.DoubleBuffer;
 import java.nio.IntBuffer;
 import org.lwjgl.opencl.CL10;
 
+/**
+ * OpenCL implementation of {@link GpuRuntimeBackend}.
+ *
+ * <p>This backend compiles generated OpenCL kernel source, marshals Java arguments into OpenCL values and buffers,
+ * launches the kernel, and copies writable results back into the original Java objects.
+ *
+ * <p>Two cache modes are available:
+ *
+ * <ul>
+ *   <li>{@link CacheMode#INSTANCE}: the default mode. Kernel/session caches live only inside this backend instance and
+ *   are released on {@link #close()}.</li>
+ *   <li>{@link CacheMode#SHARED}: compile/session caches are shared across backend instances and survive ordinary
+ *   {@link #close()} calls. This mode is meant for hot-path repeated invocations where compile latency should be paid
+ *   once and reused broadly.</li>
+ * </ul>
+ *
+ * <p>Use {@link #sharedCache()} to opt into the shared mode and {@link #shutdownSharedCache()} when the application is
+ * done with the global OpenCL cache.
+ */
 public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable {
 
+    /**
+     * Controls whether compiled kernels and runtime session state are local to one backend instance or reused globally.
+     */
+    public enum CacheMode {
+        /**
+         * Keep caches only inside the current backend instance.
+         */
+        INSTANCE,
+
+        /**
+         * Reuse compiled kernels and OpenCL runtime session state across backend instances.
+         */
+        SHARED
+    }
+
+    private static final java.util.regex.Pattern DOUBLE_USAGE_PATTERN = java.util.regex.Pattern.compile("\\bdouble(?:[234])?\\b");
+    private static final Object SHARED_RUNTIME_LOCK = new Object();
+    private static final Map<GpuKernelDescriptor, OpenClCompiledKernel> SHARED_COMPILED_KERNELS = new ConcurrentHashMap<>();
+    private static volatile OpenClRuntimeSession sharedSession;
+    private static volatile OpenClRuntimeCapabilities sharedCapabilities;
+
+    private final CacheMode cacheMode;
     private final Map<GpuKernelDescriptor, OpenClCompiledKernel> compiledKernels = new ConcurrentHashMap<>();
     private final OpenClDeviceBufferRegistry bufferRegistry = new OpenClDeviceBufferRegistry();
     private final OpenClExecutionPreparer executionPreparer = new OpenClExecutionPreparer(bufferRegistry);
     private final Map<String, Object> nativeBuffers = new ConcurrentHashMap<>();
     private volatile OpenClRuntimeSession session;
+    private volatile OpenClRuntimeCapabilities capabilities;
+
+    /**
+     * Creates an OpenCL backend with instance-local cache lifetime.
+     *
+     * <p>This is the safest default for explicit lifecycle management: kernel cache, native buffers, and session state
+     * belong only to this backend instance.
+     */
+    public OpenClGpuRuntimeBackend() {
+        this(CacheMode.INSTANCE);
+    }
+
+    /**
+     * Creates a backend with the requested cache mode.
+     *
+     * <p>This constructor is protected so custom test backends or specialized subclasses can opt into a specific cache
+     * strategy while the public API stays small.
+     */
+    protected OpenClGpuRuntimeBackend(CacheMode cacheMode) {
+        this.cacheMode = Objects.requireNonNull(cacheMode, "cacheMode");
+    }
+
+    /**
+     * Creates an OpenCL backend that reuses compiled kernels and session state across backend instances.
+     *
+     * <p>This mode is useful when application code repeatedly installs/disposes backend objects but still wants hot
+     * repeated kernel calls with near-zero compile overhead after warm-up.
+     */
+    public static OpenClGpuRuntimeBackend sharedCache() {
+        return new OpenClGpuRuntimeBackend(CacheMode.SHARED);
+    }
+
+    /**
+     * Releases the global shared OpenCL cache created by {@link #sharedCache()}.
+     *
+     * <p>Call this during application shutdown, plugin unload, or when you explicitly want to drop all globally cached
+     * compiled kernels and the shared OpenCL session.
+     */
+    public static void shutdownSharedCache() {
+        synchronized (SHARED_RUNTIME_LOCK) {
+            SHARED_COMPILED_KERNELS.values().forEach(OpenClCompiledKernel::close);
+            SHARED_COMPILED_KERNELS.clear();
+
+            OpenClRuntimeSession currentSession = sharedSession;
+            sharedSession = null;
+            sharedCapabilities = null;
+            if (currentSession != null) {
+                currentSession.close();
+            }
+        }
+    }
+
+    @Override
+    public GpuBackendTarget backendTarget() {
+        return GpuBackendTarget.OPENCL;
+    }
+
+    @Override
+    public GpuRuntimeBackendReport describeCapabilities() {
+        try {
+            OpenClRuntimeCapabilities capabilities = runtimeCapabilities();
+            java.util.EnumSet<GpuRuntimeFeature> features = java.util.EnumSet.noneOf(GpuRuntimeFeature.class);
+            if (capabilities.supportsDoublePrecision()) {
+                features.add(GpuRuntimeFeature.DOUBLE_PRECISION);
+            }
+            if (capabilities.supportsImages()) {
+                features.add(GpuRuntimeFeature.IMAGES);
+            }
+            if (capabilities.supportsImage3dWrites()) {
+                features.add(GpuRuntimeFeature.IMAGE3D_WRITES);
+            }
+            if (cacheMode == CacheMode.SHARED) {
+                features.add(GpuRuntimeFeature.SHARED_CACHE);
+            }
+            return GpuRuntimeBackendReport.available(
+                    backendTarget(),
+                    cacheMode == CacheMode.SHARED ? "OpenCL (shared cache)" : "OpenCL",
+                    capabilities.deviceLabel(),
+                    GpuRuntimeApiVersion.parseFirst(capabilities.deviceVersion()),
+                    capabilities.deviceVersion(),
+                    features,
+                    capabilities.localMemoryBytes(),
+                    capabilities.maxWorkGroupSize(),
+                    null
+            );
+        } catch (UnsupportedOperationException exception) {
+            return GpuRuntimeBackendReport.unavailable(backendTarget(), "OpenCL", exception.getMessage());
+        }
+    }
 
     @Override
     public final void invoke(GpuKernelInvocation invocation) {
         if (OpenClAbiDebug.enabled()) {
             System.err.println(OpenClAbiDebug.describeInvocation(invocation.descriptor(), invocation.arguments()));
         }
-        OpenClCompiledKernel compiledKernel = compiledKernels.computeIfAbsent(
-                invocation.descriptor(),
-                this::compileKernel
-        );
         OpenClKernelArguments arguments = OpenClArgumentMarshaller.marshall(invocation.descriptor(), invocation.arguments());
         OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(arguments);
-        executeKernel(executionPreparer.prepare(compiledKernel, plan));
+        validateInvocationPreconditions(invocation.descriptor(), plan);
+        validateCapabilitySupport(invocation.descriptor(), plan);
+        OpenClCompiledKernel compiledKernel = compiledKernelCache().computeIfAbsent(
+                invocation.descriptor(),
+                this::compileKernelChecked
+        );
+        executeKernelChecked(executionPreparer.prepare(compiledKernel, plan));
     }
 
     public final Image2DReadOnly createReadOnlyRgbaFloatImage(int width, int height, float[] rgba) {
@@ -508,6 +646,40 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     protected OpenClRuntimeSession createSession() {
         return OpenClRuntimeSession.createDefault();
+    }
+
+    protected OpenClRuntimeCapabilities runtimeCapabilities() {
+        if (cacheMode == CacheMode.SHARED) {
+            OpenClRuntimeCapabilities current = sharedCapabilities;
+            if (current != null) {
+                return current;
+            }
+
+            synchronized (SHARED_RUNTIME_LOCK) {
+                current = sharedCapabilities;
+                if (current == null) {
+                    current = session().capabilities();
+                    sharedCapabilities = current;
+                }
+            }
+
+            return current;
+        }
+
+        OpenClRuntimeCapabilities current = capabilities;
+        if (current != null) {
+            return current;
+        }
+
+        synchronized (this) {
+            current = capabilities;
+            if (current == null) {
+                current = session().capabilities();
+                capabilities = current;
+            }
+        }
+
+        return current;
     }
 
     protected Image2DReadOnly createReadOnlyRgbaFloatImageInternal(int width, int height, float[] rgba) {
@@ -1091,10 +1263,21 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         throw new IllegalArgumentException("Unsupported OpenCL readback target type: " + binding.sourceArray().getClass().getName());
     }
 
+    /**
+     * Closes resources owned by this backend instance.
+     *
+     * <p>In {@link CacheMode#INSTANCE}, this releases compiled kernels, transient native buffers, the OpenCL session,
+     * and cached capabilities for the instance.
+     *
+     * <p>In {@link CacheMode#SHARED}, instance-local transient buffers are released, but globally shared compiled
+     * kernels and session state stay alive until {@link #shutdownSharedCache()} is called.
+     */
     @Override
     public void close() {
-        compiledKernels.values().forEach(OpenClCompiledKernel::close);
-        compiledKernels.clear();
+        if (cacheMode == CacheMode.INSTANCE) {
+            compiledKernels.values().forEach(OpenClCompiledKernel::close);
+            compiledKernels.clear();
+        }
 
         nativeBuffers.values().forEach(value -> {
             if (value instanceof AutoCloseable closeable) {
@@ -1106,19 +1289,46 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             }
         });
         nativeBuffers.clear();
+        bufferRegistry.clear();
+
+        if (cacheMode == CacheMode.SHARED) {
+            return;
+        }
 
         OpenClRuntimeSession currentSession = session;
         session = null;
+        capabilities = null;
         if (currentSession != null) {
             currentSession.close();
         }
     }
 
     int cacheSize() {
-        return compiledKernels.size();
+        return compiledKernelCache().size();
+    }
+
+    int bufferCacheSize() {
+        return bufferRegistry.cacheSize();
     }
 
     private OpenClRuntimeSession session() {
+        if (cacheMode == CacheMode.SHARED) {
+            OpenClRuntimeSession current = sharedSession;
+            if (current != null) {
+                return current;
+            }
+
+            synchronized (SHARED_RUNTIME_LOCK) {
+                current = sharedSession;
+                if (current == null) {
+                    current = createSessionChecked();
+                    sharedSession = current;
+                }
+            }
+
+            return current;
+        }
+
         OpenClRuntimeSession current = session;
         if (current != null) {
             return current;
@@ -1127,16 +1337,24 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         synchronized (this) {
             current = session;
             if (current == null) {
-                try {
-                    current = createSession();
-                } catch (UnsatisfiedLinkError | IllegalStateException exception) {
-                    throw new UnsupportedOperationException("OpenCL runtime is unavailable: " + exception.getMessage(), exception);
-                }
+                current = createSessionChecked();
                 session = current;
             }
         }
 
         return current;
+    }
+
+    private OpenClRuntimeSession createSessionChecked() {
+        try {
+            return createSession();
+        } catch (UnsatisfiedLinkError | IllegalStateException exception) {
+            throw new UnsupportedOperationException("OpenCL runtime is unavailable: " + exception.getMessage(), exception);
+        }
+    }
+
+    private Map<GpuKernelDescriptor, OpenClCompiledKernel> compiledKernelCache() {
+        return cacheMode == CacheMode.SHARED ? SHARED_COMPILED_KERNELS : compiledKernels;
     }
 
     private Object resolveNativeBuffer(OpenClPreparedBufferBinding binding) {
@@ -1146,20 +1364,171 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         );
     }
 
+    private void validateInvocationPreconditions(GpuKernelDescriptor descriptor, OpenClExecutionPlan plan) {
+        resolvePlannedGlobalWorkSize(descriptor.kernelName(), plan.bufferBindings());
+    }
+
+    private void validateCapabilitySupport(GpuKernelDescriptor descriptor, OpenClExecutionPlan plan) {
+        OpenClRuntimeCapabilities capabilities = runtimeCapabilities();
+        long requestedLocalMemoryBytes = requestedLocalMemoryBytes(plan);
+        boolean usesDouble = usesDoublePrecision(descriptor);
+        boolean usesImages = usesImages(descriptor);
+        boolean usesImage3dWrites = usesImage3dWrites(descriptor);
+        if (usesDouble && !capabilities.supportsDoublePrecision()) {
+            throw new UnsupportedOperationException(
+                    "OpenCL capability precheck failed for kernel "
+                            + descriptor.kernelName()
+                            + ": device "
+                            + capabilities.deviceLabel()
+                            + " does not advertise fp64 support, but the kernel uses double precision"
+            );
+        }
+        if (usesImages && !capabilities.supportsImages()) {
+            throw new UnsupportedOperationException(
+                    "OpenCL capability precheck failed for kernel "
+                            + descriptor.kernelName()
+                            + ": device "
+                            + capabilities.deviceLabel()
+                            + " does not support OpenCL images, but the kernel requires image/sampler parameters"
+            );
+        }
+        if (usesImage3dWrites && !capabilities.supportsImage3dWrites()) {
+            throw new UnsupportedOperationException(
+                    "OpenCL capability precheck failed for kernel "
+                            + descriptor.kernelName()
+                            + ": device "
+                            + capabilities.deviceLabel()
+                            + " does not support 3D image writes required by the kernel"
+            );
+        }
+        if (requestedLocalMemoryBytes > capabilities.localMemoryBytes()) {
+            throw new UnsupportedOperationException(
+                    "OpenCL capability precheck failed for kernel "
+                            + descriptor.kernelName()
+                            + ": requested "
+                            + requestedLocalMemoryBytes
+                            + " bytes of local memory, but device "
+                            + capabilities.deviceLabel()
+                            + " exposes only "
+                            + capabilities.localMemoryBytes()
+                            + " bytes"
+            );
+        }
+    }
+
+    private OpenClCompiledKernel compileKernelChecked(GpuKernelDescriptor descriptor) {
+        try {
+            return compileKernel(descriptor);
+        } catch (RuntimeException exception) {
+            throw OpenClFailureFormatter.buildFailure(descriptor, runtimeCapabilities().deviceLabel(), exception);
+        }
+    }
+
+    private void executeKernelChecked(OpenClPreparedExecution execution) {
+        try {
+            executeKernel(execution);
+        } catch (RuntimeException exception) {
+            throw OpenClFailureFormatter.executionFailure(
+                    execution.compiledKernel().descriptor(),
+                    runtimeCapabilities().deviceLabel(),
+                    exception
+            );
+        }
+    }
+
+    private long requestedLocalMemoryBytes(OpenClExecutionPlan plan) {
+        long total = 0L;
+        for (OpenClLocalBinding localBinding : plan.localBindings()) {
+            total += localBinding.byteSize();
+        }
+        return total;
+    }
+
+    private boolean usesDoublePrecision(GpuKernelDescriptor descriptor) {
+        if (DOUBLE_USAGE_PATTERN.matcher(descriptor.kernelSource()).find()) {
+            return true;
+        }
+        for (GpuKernelParameterDescriptor parameterDescriptor : descriptor.parameterDescriptors()) {
+            String javaType = parameterDescriptor.javaType();
+            if ("double".equals(javaType) || "double[]".equals(javaType)) {
+                return true;
+            }
+            if (javaType != null && (javaType.startsWith("Double") || javaType.contains(".Double"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean usesImages(GpuKernelDescriptor descriptor) {
+        for (GpuKernelParameterDescriptor parameterDescriptor : descriptor.parameterDescriptors()) {
+            String javaType = parameterDescriptor.javaType();
+            if (javaType != null && javaType.startsWith("Image")) {
+                return true;
+            }
+            if ("Sampler".equals(javaType) || (javaType != null && javaType.endsWith(".Sampler"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean usesImage3dWrites(GpuKernelDescriptor descriptor) {
+        if (descriptor.kernelSource().contains("write_only image3d_t")) {
+            return true;
+        }
+        for (GpuKernelParameterDescriptor parameterDescriptor : descriptor.parameterDescriptors()) {
+            String javaType = parameterDescriptor.javaType();
+            if ("Image3DWriteOnly".equals(javaType) || (javaType != null && javaType.endsWith(".Image3DWriteOnly"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private long resolveGlobalWorkSize(OpenClPreparedExecution execution) {
-        if (execution.bufferBindings().isEmpty()) {
+        return resolveGlobalWorkSize(execution.compiledKernel().descriptor().kernelName(), execution.bufferBindings());
+    }
+
+    private long resolvePlannedGlobalWorkSize(String kernelName, java.util.List<OpenClBufferBinding> bufferBindings) {
+        if (bufferBindings.isEmpty()) {
             throw new UnsupportedOperationException(
                     "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
-                            + execution.compiledKernel().descriptor().kernelName()
+                            + kernelName
             );
         }
 
-        int expectedLength = execution.bufferBindings().get(0).binding().length();
-        for (OpenClPreparedBufferBinding binding : execution.bufferBindings()) {
+        int expectedLength = bufferBindings.get(0).length();
+        for (OpenClBufferBinding binding : bufferBindings) {
+            if (binding.length() != expectedLength) {
+                throw new IllegalArgumentException(
+                        "Mismatched GPU array lengths for kernel "
+                                + kernelName
+                                + ": expected "
+                                + expectedLength
+                                + " but found "
+                                + binding.length()
+                );
+            }
+        }
+
+        return expectedLength;
+    }
+
+    private long resolveGlobalWorkSize(String kernelName, java.util.List<OpenClPreparedBufferBinding> bufferBindings) {
+        if (bufferBindings.isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
+                            + kernelName
+            );
+        }
+
+        int expectedLength = bufferBindings.get(0).binding().length();
+        for (OpenClPreparedBufferBinding binding : bufferBindings) {
             if (binding.binding().length() != expectedLength) {
                 throw new IllegalArgumentException(
                         "Mismatched GPU array lengths for kernel "
-                                + execution.compiledKernel().descriptor().kernelName()
+                                + kernelName
                                 + ": expected "
                                 + expectedLength
                                 + " but found "

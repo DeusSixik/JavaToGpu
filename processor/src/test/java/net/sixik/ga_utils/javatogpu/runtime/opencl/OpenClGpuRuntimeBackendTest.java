@@ -38,9 +38,9 @@ class OpenClGpuRuntimeBackendTest {
         GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
                 "kernel",
                 "javatogpu/sample/Demo/kernel.cl",
-                "__kernel void kernel() {}",
+                "__kernel void kernel(__global int* output) { output[0] = 1; }",
                 java.util.List.of(
-                        new GpuKernelParameterDescriptor("value", "int", GpuKernelParameterAccess.VALUE)
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
                 )
         );
         AtomicInteger compileCalls = new AtomicInteger();
@@ -65,8 +65,8 @@ class OpenClGpuRuntimeBackendTest {
             }
         };
 
-        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{1}));
-        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{2}));
+        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new int[]{0}}));
+        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new int[]{0}}));
 
         assertEquals(1, compileCalls.get());
         assertEquals(2, executeCalls.get());
@@ -98,7 +98,7 @@ class OpenClGpuRuntimeBackendTest {
                 "OpenCL execution requires at least one buffer argument to derive global work size for kernel kernel",
                 exception.getMessage()
         );
-        assertEquals(1, backend.cacheSize());
+        assertEquals(0, backend.cacheSize());
     }
 
     @Test
@@ -255,6 +255,175 @@ class OpenClGpuRuntimeBackendTest {
                 exception.getMessage()
         );
         assertEquals(0, executeCalls.get());
+        assertEquals(0, backend.cacheSize());
+    }
+
+    @Test
+    void rejectsDoubleKernelWhenDeviceLacksFp64BeforeCompile() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Double/kernel.cl",
+                "__kernel void kernel(__global double* input, __global double* output) { output[0] = input[0]; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "double[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "double[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", false, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                compileCalls.incrementAndGet();
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+        };
+
+        UnsupportedOperationException exception = assertThrows(
+                UnsupportedOperationException.class,
+                () -> backend.invoke(new GpuKernelInvocation(
+                        descriptor,
+                        new Object[]{new double[]{1.0d}, new double[]{0.0d}}
+                ))
+        );
+
+        assertEquals(
+                "OpenCL capability precheck failed for kernel kernel: device Fake GPU does not advertise fp64 support, but the kernel uses double precision",
+                exception.getMessage()
+        );
+        assertEquals(0, compileCalls.get());
+        assertEquals(0, backend.cacheSize());
+    }
+
+    @Test
+    void rejectsImageKernelWhenDeviceLacksImageSupportBeforeCompile() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Image/kernel.cl",
+                "__kernel void kernel(read_only image2d_t inputImage, sampler_t sampler, __global int* output) { }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("inputImage", "Image2DReadOnly", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("sampler", "Sampler", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, false, false, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                compileCalls.incrementAndGet();
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+        };
+
+        UnsupportedOperationException exception = assertThrows(
+                UnsupportedOperationException.class,
+                () -> backend.invoke(new GpuKernelInvocation(
+                        descriptor,
+                        new Object[]{Image2DReadOnly.borrowed(1L, 1, 1), Sampler.borrowed(2L), new int[]{0}}
+                ))
+        );
+
+        assertEquals(
+                "OpenCL capability precheck failed for kernel kernel: device Fake GPU does not support OpenCL images, but the kernel requires image/sampler parameters",
+                exception.getMessage()
+        );
+        assertEquals(0, compileCalls.get());
+    }
+
+    @Test
+    void rejectsImage3dWriteKernelWhenDeviceLacks3dWriteSupportBeforeCompile() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Image3d/kernel.cl",
+                "__kernel void kernel(read_only image3d_t inputImage, write_only image3d_t outputImage, sampler_t sampler, __global int* output) { }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("inputImage", "Image3DReadOnly", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("outputImage", "Image3DWriteOnly", GpuKernelParameterAccess.READ_WRITE),
+                        new GpuKernelParameterDescriptor("sampler", "Sampler", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, false, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                compileCalls.incrementAndGet();
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+        };
+
+        UnsupportedOperationException exception = assertThrows(
+                UnsupportedOperationException.class,
+                () -> backend.invoke(new GpuKernelInvocation(
+                        descriptor,
+                        new Object[]{Image3DReadOnly.borrowed(1L, 1, 1, 1), Image3DWriteOnly.borrowed(2L, 1, 1, 1), Sampler.borrowed(3L), new int[]{0}}
+                ))
+        );
+
+        assertEquals(
+                "OpenCL capability precheck failed for kernel kernel: device Fake GPU does not support 3D image writes required by the kernel",
+                exception.getMessage()
+        );
+        assertEquals(0, compileCalls.get());
+    }
+
+    @Test
+    void rejectsLocalMemoryRequestThatExceedsDeviceBudgetBeforeCompile() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Local/kernel.cl",
+                "__kernel void kernel(__local float* scratch, __global float* output) { output[0] = scratch[0]; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("scratch", "float[]", GpuKernelParameterAccess.LOCAL),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 8L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                compileCalls.incrementAndGet();
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+        };
+
+        UnsupportedOperationException exception = assertThrows(
+                UnsupportedOperationException.class,
+                () -> backend.invoke(new GpuKernelInvocation(
+                        descriptor,
+                        new Object[]{new float[]{1.0f, 2.0f, 3.0f}, new float[]{0.0f}}
+                ))
+        );
+
+        assertEquals(
+                "OpenCL capability precheck failed for kernel kernel: requested 12 bytes of local memory, but device Fake GPU exposes only 8 bytes",
+                exception.getMessage()
+        );
+        assertEquals(0, compileCalls.get());
     }
 
     @Test
@@ -281,6 +450,259 @@ class OpenClGpuRuntimeBackendTest {
         );
 
         assertEquals("OpenCL runtime is unavailable: LWJGL OpenCL bindings are missing", exception.getMessage());
+    }
+
+    @Test
+    void formatsKernelBuildFailuresWithKernelAndDeviceContext() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel(__global float* output) { output[0] = 1.0f; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                throw new RuntimeException("driver build log: unknown type name 'half16'");
+            }
+        };
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new float[]{0.0f}}))
+        );
+
+        assertEquals(
+                "OpenCL kernel build failed for kernel kernel on device Fake GPU [javatogpu/sample/Demo/kernel.cl]: driver build log: unknown type name 'half16'",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void formatsKernelExecutionFailuresWithKernelAndDeviceContext() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel(__global float* output) { output[0] = 1.0f; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+
+            @Override
+            protected void executeKernel(OpenClPreparedExecution execution) {
+                throw new RuntimeException("clEnqueueNDRangeKernel failed: CL_OUT_OF_RESOURCES");
+            }
+        };
+
+        IllegalStateException exception = assertThrows(
+                IllegalStateException.class,
+                () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new float[]{0.0f}}))
+        );
+
+        assertEquals(
+                "OpenCL kernel execution failed for kernel kernel on device Fake GPU: clEnqueueNDRangeKernel failed: CL_OUT_OF_RESOURCES",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void closeClearsBufferRegistryClosesTrackedBuffersAndAllowsReuse() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel(__global int* output) { output[0] = 1; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+        AtomicInteger trackedBufferCloseCalls = new AtomicInteger();
+        AtomicInteger deviceBufferAllocations = new AtomicInteger();
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                compileCalls.incrementAndGet();
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:" + compileCalls.get());
+            }
+
+            @Override
+            protected Object createDeviceBuffer(OpenClBufferBinding binding) {
+                deviceBufferAllocations.incrementAndGet();
+                return new AutoCloseable() {
+                    private boolean closed;
+
+                    @Override
+                    public void close() {
+                        if (!closed) {
+                            closed = true;
+                            trackedBufferCloseCalls.incrementAndGet();
+                        }
+                    }
+                };
+            }
+
+            @Override
+            protected void uploadToDeviceBuffer(Object nativeBuffer, OpenClBufferBinding binding) {
+                // no-op
+            }
+
+            @Override
+            protected void bindBufferArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, Object nativeBuffer) {
+                // no-op
+            }
+
+            @Override
+            protected void bindScalarArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, OpenClScalarBinding binding) {
+                // no-op
+            }
+
+            @Override
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+                // no-op
+            }
+
+            @Override
+            protected void readBackFromDeviceBuffer(Object nativeBuffer, OpenClBufferBinding binding) {
+                // no-op
+            }
+        };
+
+        int[] output = new int[]{0};
+        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{output}));
+
+        assertEquals(1, compileCalls.get());
+        assertEquals(1, deviceBufferAllocations.get());
+        assertEquals(1, backend.cacheSize());
+        assertEquals(1, backend.bufferCacheSize());
+
+        backend.close();
+
+        assertEquals(1, trackedBufferCloseCalls.get());
+        assertEquals(0, backend.cacheSize());
+        assertEquals(0, backend.bufferCacheSize());
+
+        backend.close();
+
+        assertEquals(1, trackedBufferCloseCalls.get());
+
+        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{output}));
+
+        assertEquals(2, compileCalls.get());
+        assertEquals(2, deviceBufferAllocations.get());
+        assertEquals(1, backend.cacheSize());
+        assertEquals(1, backend.bufferCacheSize());
+    }
+
+    @Test
+    void sharedCacheRetainsCompiledKernelAcrossBackendInstancesUntilExplicitShutdown() {
+        OpenClGpuRuntimeBackend.shutdownSharedCache();
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel(__global int* output) { output[0] = 1; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+
+        OpenClGpuRuntimeBackend firstBackend = new OpenClGpuRuntimeBackend(OpenClGpuRuntimeBackend.CacheMode.SHARED) {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:" + compileCalls.incrementAndGet());
+            }
+
+            @Override
+            protected void executeKernel(OpenClPreparedExecution execution) {
+                // no-op
+            }
+        };
+
+        firstBackend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new int[]{0}}));
+        assertEquals(1, compileCalls.get());
+        assertEquals(1, firstBackend.cacheSize());
+        firstBackend.close();
+        assertEquals(1, firstBackend.cacheSize());
+
+        OpenClGpuRuntimeBackend secondBackend = new OpenClGpuRuntimeBackend(OpenClGpuRuntimeBackend.CacheMode.SHARED) {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:" + compileCalls.incrementAndGet());
+            }
+
+            @Override
+            protected void executeKernel(OpenClPreparedExecution execution) {
+                // no-op
+            }
+        };
+
+        secondBackend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new int[]{0}}));
+        assertEquals(1, compileCalls.get());
+        assertEquals(1, secondBackend.cacheSize());
+        secondBackend.close();
+
+        OpenClGpuRuntimeBackend.shutdownSharedCache();
+
+        OpenClGpuRuntimeBackend thirdBackend = new OpenClGpuRuntimeBackend(OpenClGpuRuntimeBackend.CacheMode.SHARED) {
+            @Override
+            protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+            }
+
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:" + compileCalls.incrementAndGet());
+            }
+
+            @Override
+            protected void executeKernel(OpenClPreparedExecution execution) {
+                // no-op
+            }
+        };
+
+        thirdBackend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new int[]{0}}));
+        assertEquals(2, compileCalls.get());
+        thirdBackend.close();
+        OpenClGpuRuntimeBackend.shutdownSharedCache();
     }
 
     @Test

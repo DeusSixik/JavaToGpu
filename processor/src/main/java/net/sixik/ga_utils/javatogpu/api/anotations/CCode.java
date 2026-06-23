@@ -52,4 +52,21 @@ public @interface CCode {
      * Backends on which this helper is allowed to participate.
      */
     GpuBackendTarget[] backends() default {GpuBackendTarget.OPENCL};
+
+    /**
+     * Optional backend capability/version guard understood by the emitter.
+     *
+     * <p>The current OpenCL emitter accepts values such as {@code OpenCL_3}, {@code OpenCL_3_0}, or
+     * {@code OpenCL_2_1}. When set together with {@link #callback()}, the generated helper keeps the primary body for
+     * newer environments and forwards to the callback helper otherwise.
+     */
+    String support() default "";
+
+    /**
+     * Fallback helper name used when {@link #support()} is not satisfied by the backend source environment.
+     *
+     * <p>The fallback helper must live in the same owner and currently must have the same parameter list and return
+     * type as the guarded helper.
+     */
+    String callback() default "";
 }

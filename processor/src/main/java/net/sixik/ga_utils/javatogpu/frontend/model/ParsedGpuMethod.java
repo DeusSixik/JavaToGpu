@@ -15,6 +15,8 @@ public record ParsedGpuMethod(
         boolean inline,
         List<String> openClAttributes,
         String nativeCode,
+        String supportCondition,
+        String callbackMethodName,
         boolean nativeDeclaration
 ) {
 }

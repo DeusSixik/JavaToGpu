@@ -1,5 +1,7 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUVectorType;
+
 /**
  * Java-side representation of the OpenCL {@code float2} vector type.
  *
@@ -10,6 +12,7 @@ package net.sixik.ga_utils.javatogpu.api;
  * float sum = uv.x + uv.y;
  * }</pre>
  */
+@GPUVectorType(openClType = "float2", componentType = "float", fields = {"x", "y"})
 public class Float2 {
 
     /**

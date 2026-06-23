@@ -285,6 +285,8 @@ class GpuAsmToMethodNodeLowererTest {
                 false,
                 List.of(),
                 "",
+                "",
+                "",
                 false
         );
     }

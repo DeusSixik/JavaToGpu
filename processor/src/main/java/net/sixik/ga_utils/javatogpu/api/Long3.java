@@ -1,8 +1,11 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUVectorType;
+
 /**
  * Java-side representation of the OpenCL {@code long3} vector type.
  */
+@GPUVectorType(openClType = "long3", componentType = "long", fields = {"x", "y", "z"})
 public class Long3 {
 
     /**

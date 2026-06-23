@@ -17,6 +17,7 @@ import net.sixik.ga_utils.javatogpu.api.Image3DWriteOnly;
 import net.sixik.ga_utils.javatogpu.api.Sampler;
 import net.sixik.ga_utils.javatogpu.api.UInt;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeScope;
 import net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackend;
 
 public final class ExamplesMain {
@@ -93,8 +94,8 @@ public final class ExamplesMain {
         float[] qualifierOutput = new float[floatInput.length];
         float[] pointerQualifierOutput = new float[floatInput.length];
 
-        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
-            GpuRuntime.setBackend(backend);
+        try (GpuRuntimeScope runtimeScope = GpuRuntime.useOpenClSharedCache()) {
+            OpenClGpuRuntimeBackend backend = (OpenClGpuRuntimeBackend) runtimeScope.installedBackend();
 
             System.out.println("Running basic example...");
             GpuShowcase.basicMath(floatInput, basicOutput);
@@ -393,7 +394,7 @@ public final class ExamplesMain {
         } catch (RuntimeException exception) {
             System.out.println("GPU execution failed: " + exception.getMessage());
         } finally {
-            GpuRuntime.setBackend(GpuRuntime.defaultBackend());
+            GpuRuntime.shutdownOpenClSharedCache();
         }
 
         System.out.println("Running ASM compiler example...");

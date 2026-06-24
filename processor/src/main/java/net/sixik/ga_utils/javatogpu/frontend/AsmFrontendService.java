@@ -115,28 +115,46 @@ public final class AsmFrontendService {
     private void validateSignatureCompatibility(AsmGpuMethod method) {
         ParsedGpuMethod parsedMethod = method.parsedMethod();
         Type methodType = Type.getMethodType(method.methodNode().desc);
+        String methodLabel = method.ownerInternalName() + "." + parsedMethod.name();
 
         if (parsedMethod.parameters().size() != methodType.getArgumentTypes().length) {
-            throw new AsmFrontendException("Parsed method signature does not match ASM descriptor parameter count for "
-                    + method.ownerInternalName() + "." + parsedMethod.name());
+            throw new AsmFrontendException(
+                    "ASM frontend signature mismatch for "
+                            + methodLabel
+                            + ": parsed method parameter count does not match the ASM descriptor; regenerate the parsed signature from the same source/ASM pair"
+            );
         }
 
         for (int index = 0; index < parsedMethod.parameters().size(); index++) {
             String parsedType = parsedMethod.parameters().get(index).javaType();
             String asmType = toJavaTypeName(methodType.getArgumentTypes()[index]);
             if (!parsedType.equals(asmType)) {
-                throw new AsmFrontendException("Parsed method parameter type does not match ASM descriptor at index "
-                        + index + " for " + method.ownerInternalName() + "." + parsedMethod.name()
-                        + ": expected " + parsedType + " but got " + asmType);
+                throw new AsmFrontendException(
+                        "ASM frontend signature mismatch for "
+                                + methodLabel
+                                + ": parsed parameter type does not match the ASM descriptor at index "
+                                + index
+                                + "; expected "
+                                + parsedType
+                                + " but got "
+                                + asmType
+                                + "; regenerate the parsed signature from the same source/ASM pair"
+                );
             }
         }
 
         String parsedReturnType = parsedMethod.returnType();
         String asmReturnType = toJavaTypeName(methodType.getReturnType());
         if (!parsedReturnType.equals(asmReturnType)) {
-            throw new AsmFrontendException("Parsed method return type does not match ASM descriptor for "
-                    + method.ownerInternalName() + "." + parsedMethod.name()
-                    + ": expected " + parsedReturnType + " but got " + asmReturnType);
+            throw new AsmFrontendException(
+                    "ASM frontend signature mismatch for "
+                            + methodLabel
+                            + ": parsed return type does not match the ASM descriptor; expected "
+                            + parsedReturnType
+                            + " but got "
+                            + asmReturnType
+                            + "; regenerate the parsed signature from the same source/ASM pair"
+            );
         }
     }
 
@@ -182,7 +200,11 @@ public final class AsmFrontendService {
             case Type.DOUBLE -> "double";
             case Type.ARRAY -> toJavaTypeName(type.getElementType()) + "[]";
             case Type.OBJECT -> simpleInternalName(type.getInternalName());
-            default -> throw new AsmFrontendException("Unsupported ASM type in AsmFrontendService: " + type.getDescriptor());
+            default -> throw new AsmFrontendException(
+                    "Unsupported ASM type in GPU frontend: "
+                            + type.getDescriptor()
+                            + "; use primitive scalars, single-dimension arrays, supported vectors, pointers, images/samplers, or @GPUStruct values"
+            );
         };
     }
 

@@ -158,6 +158,7 @@ class AsmSubsetValidatorTest {
         );
 
         assertTrue(exception.getMessage().contains("only supports static methods"));
+        assertTrue(exception.getMessage().contains("explicit parameters"));
     }
 
     @Test
@@ -179,6 +180,7 @@ class AsmSubsetValidatorTest {
 
         assertTrue(exception.getMessage().contains("Unsupported method invocation kind"));
         assertTrue(exception.getMessage().contains("INVOKEVIRTUAL"));
+        assertTrue(exception.getMessage().contains("gpu-friendly-asm-contract.md"));
     }
 
     @Test
@@ -224,6 +226,7 @@ class AsmSubsetValidatorTest {
         );
 
         assertTrue(exception.getMessage().contains("Exception handlers are not supported"));
+        assertTrue(exception.getMessage().contains("without try/catch blocks"));
     }
 
     @Test

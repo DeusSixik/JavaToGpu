@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class GpuSubsetValidatorTest {
@@ -292,6 +293,24 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
+    void rejectsExpressionStatementsWithQuickFixHint() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    GPU.sin(output[0]);
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validate(parser.parseMethod(methodSource))
+        );
+
+        assertTrue(exception.getMessage().contains("Only void @CCode helper calls can be used as standalone statements in @GPU methods"));
+        assertTrue(exception.getMessage().contains("assign the helper result to a variable"));
+    }
+
+    @Test
     void acceptsFloatLiteralsAndParenthesizedExpressions() {
         String methodSource = """
                 @GPU
@@ -349,6 +368,25 @@ class GpuSubsetValidatorTest {
                 """;
 
         assertThrows(GpuValidationException.class, () -> validator.validate(parser.parseMethod(methodSource)));
+    }
+
+    @Test
+    void rejectsArrayParametersWithoutGlobalAnnotationWithQuickFixHint() {
+        String methodSource = """
+                @GPU
+                void kernel(float[] input, @GPUGlobal float[] output) {
+                    output[0] = input[0];
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validate(parser.parseMethod(methodSource))
+        );
+
+        assertTrue(exception.getMessage().contains("Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal"));
+        assertTrue(exception.getMessage().contains("@GPUGlobal float[] input"));
+        assertTrue(exception.getMessage().contains("move buffer-backed data out of private locals"));
     }
 
     @Test
@@ -531,6 +569,44 @@ class GpuSubsetValidatorTest {
                 "@GPUStruct field aligned(...) requires a single positive integer",
                 exception.getMessage()
         );
+    }
+
+    @Test
+    void rejectsStructArrayFieldsWithKernelParameterHint() {
+        String childSource = """
+                @GPUStruct
+                class Child {
+                    float x;
+                }
+                """;
+        String parentSource = """
+                @GPUStruct
+                class Parent {
+                    Child[] values;
+                }
+                """;
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    output[0] = 1.0f;
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validateKernel(
+                        parser.parseMethod(methodSource, "Demo", "sample.Demo"),
+                        java.util.List.of(),
+                        java.util.List.of(
+                                structParser.parseStruct(childSource, "Child", "sample.Child"),
+                                structParser.parseStruct(parentSource, "Parent", "sample.Parent")
+                        )
+                )
+        );
+
+        assertTrue(exception.getMessage().contains("Unsupported @GPUStruct field type: Child[]"));
+        assertTrue(exception.getMessage().contains("arrays are not supported inside @GPUStruct fields in the current OpenCL ABI"));
+        assertTrue(exception.getMessage().contains("move the array to a kernel parameter or flatten it"));
     }
 
     @Test

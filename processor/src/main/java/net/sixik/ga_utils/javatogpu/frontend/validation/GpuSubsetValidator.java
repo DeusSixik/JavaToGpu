@@ -452,7 +452,7 @@ public final class GpuSubsetValidator {
                             1,
                             1,
                             "Unsupported @GPUStruct field type: " + fieldType
-                                    + "; arrays are not supported inside @GPUStruct fields in the current OpenCL ABI"
+                                    + "; arrays are not supported inside @GPUStruct fields in the current OpenCL ABI; move the array to a kernel parameter or flatten it into scalar/vector fields"
                     ));
                     continue;
                 }
@@ -631,7 +631,10 @@ public final class GpuSubsetValidator {
             validateMethodCall(methodCallExpr, issues, scopes, context);
             String resultType = inferExpressionType(methodCallExpr, scopes, context);
             if (resultType != null && !"void".equals(resultType)) {
-                issues.add(issue(statement, "Only void @CCode helper calls can be used as standalone statements in @GPU methods"));
+                issues.add(issue(
+                        statement,
+                        "Only void @CCode helper calls can be used as standalone statements in @GPU methods; assign the helper result to a variable or write it directly into an output expression"
+                ));
             }
             return;
         }
@@ -1602,7 +1605,8 @@ public final class GpuSubsetValidator {
 
     private String unknownHelperMessage(String owner, String methodName) {
         return "Unknown @CCode helper call in @GPU method: "
-                + (owner.isBlank() ? methodName : owner + "." + methodName);
+                + (owner.isBlank() ? methodName : owner + "." + methodName)
+                + "; declare a matching @CCode helper and pass it to the frontend, or fix the owner/name mismatch";
     }
 
     private String ambiguousHelperMessage(String owner, String methodName, List<String> argumentTypes, boolean ownerQualified) {
@@ -1611,8 +1615,8 @@ public final class GpuSubsetValidator {
                 + callSite
                 + argumentTypes
                 + (ownerQualified
-                ? "; use a more specific helper owner"
-                : "; qualify it with the helper class name");
+                ? "; use a more specific helper owner or cast arguments to the exact signature"
+                : "; qualify it with the helper class name or cast arguments to the exact signature");
     }
 
     private Map<HelperSignature, List<HelperDescriptor>> buildHelperRegistry(List<ParsedGpuMethod> helperMethods, List<GpuValidationIssue> issues) {
@@ -1864,8 +1868,8 @@ public final class GpuSubsetValidator {
             return "Unsupported GPU parameter type: boolean; use int or byte masks for kernel parameters because boolean kernel parameters are not part of the current OpenCL contract";
         }
         return (kernelEntry
-                ? "Unsupported GPU parameter type: " + type + "; supported @GPU parameter shapes are scalar values, vectors, images/samplers, @GPUStruct values, and array parameters annotated with an explicit GPU address space"
-                : "Unsupported GPU parameter type: " + type + "; supported helper parameter shapes are scalar values, vectors, pointers, images/samplers, and @GPUStruct values");
+                ? "Unsupported GPU parameter type: " + type + "; supported @GPU parameter shapes are scalar values, vectors, images/samplers, @GPUStruct values, and array parameters annotated with an explicit GPU address space; for arrays, add @GPUGlobal, @GPUConstant, or @GPULocal"
+                : "Unsupported GPU parameter type: " + type + "; supported helper parameter shapes are scalar values, vectors, pointers, images/samplers, and @GPUStruct values; if this is a pointer-like value, use a Ptr type or a struct instead");
     }
 
     private String arrayAddressSpaceRequiredMessage(String type) {
@@ -1873,19 +1877,19 @@ public final class GpuSubsetValidator {
                 + type
                 + "; for example: @GPUGlobal "
                 + type
-                + " input";
+                + " input; move buffer-backed data out of private locals";
     }
 
     private String unsupportedStatementMessage(Statement statement) {
         return "Unsupported statement in @GPU method: "
                 + statement.getClass().getSimpleName()
-                + "; use the supported Java GPU subset from docs/supported-subset-contract.md";
+                + "; use the supported Java GPU subset from docs/supported-subset-contract.md or flatten the statement into if/loops/assignments";
     }
 
     private String unsupportedExpressionMessage(Expression expression) {
         return "Unsupported expression in @GPU method: "
                 + expression
-                + "; rewrite it into the supported Java GPU subset from docs/supported-subset-contract.md";
+                + "; rewrite it into the supported Java GPU subset from docs/supported-subset-contract.md, helper calls, or explicit temporaries";
     }
 
     private record ValidationContext(

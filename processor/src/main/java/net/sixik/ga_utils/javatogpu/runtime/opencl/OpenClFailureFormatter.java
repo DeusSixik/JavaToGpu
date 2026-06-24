@@ -17,7 +17,8 @@ final class OpenClFailureFormatter {
                         + descriptor.kernelResource()
                         + "]: "
                         + rootMessage(cause)
-                        + "; check the generated kernel source and enable ABI debug for layout-sensitive failures",
+                        + "; check the generated kernel source and enable ABI debug for layout-sensitive failures"
+                        + "; if this is a repeated driver-specific failure, compare against docs/opencl-known-device-quirks.md",
                 cause
         );
     }
@@ -29,7 +30,8 @@ final class OpenClFailureFormatter {
                         + " on device "
                         + deviceLabel
                         + ": "
-                        + rootMessage(cause),
+                        + rootMessage(cause)
+                        + "; if the failure is capability-related, re-run the precheck or switch to a fallback backend",
                 cause
         );
     }

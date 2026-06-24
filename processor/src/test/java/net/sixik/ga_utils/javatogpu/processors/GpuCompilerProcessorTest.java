@@ -4106,6 +4106,8 @@ class GpuCompilerProcessorTest {
 
         assertTrue(diagnostics.getDiagnostics().stream().map(diagnostic -> diagnostic.getMessage(null)).anyMatch(message ->
                 String.valueOf(message).contains("Unsupported @GPUStruct field type: Child[]; arrays are not supported inside @GPUStruct fields in the current OpenCL ABI")
+                        && String.valueOf(message).contains("move the array to a kernel parameter or flatten it")
+                        && String.valueOf(message).contains("docs/gpu-diagnostics-guide.md")
         ));
     }
 
@@ -4437,6 +4439,7 @@ class GpuCompilerProcessorTest {
         assertTrue(
                 diagnostics.getDiagnostics().stream().anyMatch(diagnostic ->
                         String.valueOf(diagnostic.getMessage(null)).contains("Unsupported GPU parameter type: boolean; use int or byte masks for kernel parameters")
+                                && String.valueOf(diagnostic.getMessage(null)).contains("docs/gpu-diagnostics-guide.md")
                 )
         );
     }
@@ -4486,6 +4489,8 @@ class GpuCompilerProcessorTest {
                         String.valueOf(diagnostic.getMessage(null)).contains(
                                 "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: float[]; for example: @GPUGlobal float[] input"
                         )
+                                && String.valueOf(diagnostic.getMessage(null)).contains("move buffer-backed data out of private locals")
+                                && String.valueOf(diagnostic.getMessage(null)).contains("docs/gpu-diagnostics-guide.md")
                 )
         );
     }

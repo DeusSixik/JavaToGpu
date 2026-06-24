@@ -260,6 +260,7 @@ class AsmExpressionLifterTest {
         );
 
         assertEquals(true, exception.getMessage().contains("only linear ASM blocks"));
+        assertEquals(true, exception.getMessage().contains("structured ASM lifting"));
     }
 
     @Test

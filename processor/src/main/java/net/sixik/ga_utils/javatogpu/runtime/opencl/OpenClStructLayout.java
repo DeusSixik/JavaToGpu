@@ -14,7 +14,11 @@ record OpenClStructLayout(
         for (OpenClFieldLayout field : fields) {
             Object fieldValue = OpenClAbiSupport.readFieldValue(value, field.field());
             if (fieldValue == null) {
-                throw new IllegalArgumentException("Null @GPUStruct field is not supported for OpenCL marshalling: " + field.field().getName());
+                throw new IllegalArgumentException(
+                        "Null @GPUStruct field is not supported for OpenCL marshalling: "
+                                + field.field().getName()
+                                + "; initialize nested structs before launching the kernel"
+                );
             }
             field.layout().write(fieldValue, buffer, offset + field.offset());
         }

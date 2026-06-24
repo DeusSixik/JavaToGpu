@@ -279,6 +279,7 @@ class GpuFrontendServiceTest {
 
         assertTrue(exception.getMessage().contains("Ambiguous @CCode helper call in @GPU method"));
         assertTrue(exception.getMessage().contains("square[float]"));
+        assertTrue(exception.getMessage().contains("cast arguments to the exact signature"));
     }
 
     @Test
@@ -363,6 +364,31 @@ class GpuFrontendServiceTest {
         assertTrue(exception.getMessage().contains("Recursive @CCode helper calls are not supported"));
         assertTrue(exception.getMessage().contains("jtg_fn_KernelMath_ping_float"));
         assertTrue(exception.getMessage().contains("jtg_fn_KernelMath_pong_float"));
+    }
+
+    @Test
+    void rejectsUnknownCCodeHelperCallWithQuickFixHint() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = MissingMath.square(input[id]);
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser parser =
+                new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
+        ParsedGpuMethod kernelMethod = parser.parseMethod(methodSource, "Demo", "sample.Demo");
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> service.validateLowerAndEmit(kernelMethod, List.of())
+        );
+
+        assertTrue(exception.getMessage().contains("Unknown @CCode helper call in @GPU method: MissingMath.square"));
+        assertTrue(exception.getMessage().contains("declare a matching @CCode helper"));
+        assertTrue(exception.getMessage().contains("owner/name mismatch"));
     }
 
     @Test

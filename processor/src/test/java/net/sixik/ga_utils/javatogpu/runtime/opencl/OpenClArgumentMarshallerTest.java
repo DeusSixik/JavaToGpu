@@ -670,6 +670,7 @@ class OpenClArgumentMarshallerTest {
 
         assertTrue(exception.getMessage().contains("Failed to marshall parameter 'sample':"));
         assertTrue(exception.getMessage().contains("Null @GPUStruct field is not supported for OpenCL marshalling: inner"));
+        assertTrue(exception.getMessage().contains("initialize nested structs before launching the kernel"));
     }
 
     @Test

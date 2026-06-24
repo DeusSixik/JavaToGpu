@@ -140,7 +140,8 @@ public final class AsmExpressionLifter {
                     || block.terminatorKind() == AsmTerminatorKind.GOTO
                     || block.terminatorKind() == AsmTerminatorKind.SWITCH) {
                 throw new AsmFrontendException("AsmExpressionLifter currently supports only linear ASM blocks, but got "
-                        + block.terminatorKind() + " in " + ownerInternalName + "." + methodNode.name + methodNode.desc);
+                        + block.terminatorKind() + " in " + ownerInternalName + "." + methodNode.name + methodNode.desc
+                        + "; switch to structured ASM lifting or rewrite the bytecode into the GPU-friendly ASM subset from docs/gpu-friendly-asm-contract.md");
             }
         }
     }
@@ -1130,7 +1131,8 @@ public final class AsmExpressionLifter {
                     state.emit(new GpuIrReturn(state.popValue().expression));
             case Opcodes.RETURN -> state.emit(new GpuIrReturn(null));
             default -> throw new AsmFrontendException("AsmExpressionLifter does not yet support opcode "
-                    + instruction.opcodeName() + " in linear lifting");
+                    + instruction.opcodeName() + " in linear lifting"
+                    + "; rewrite this bytecode pattern into the GPU-friendly ASM subset from docs/gpu-friendly-asm-contract.md");
         }
     }
 
@@ -1259,7 +1261,8 @@ public final class AsmExpressionLifter {
 
     private void liftTypeInstruction(LiftingState state, TypeInsnNode instruction, AsmInstruction asmInstruction) {
         throw new AsmFrontendException("AsmExpressionLifter does not yet support object construction patterns like "
-                + asmInstruction.opcodeName() + " (" + instruction.desc + ")");
+                + asmInstruction.opcodeName() + " (" + instruction.desc + ")"
+                + "; restrict construction to supported pointer/vector/struct value patterns from docs/gpu-friendly-asm-contract.md");
     }
 
     private void liftPopInstruction(LiftingState state) {
@@ -1273,7 +1276,8 @@ public final class AsmExpressionLifter {
         StackValue index = state.popValue();
         StackValue array = state.popValue();
         if (!(array.expression instanceof GpuIrVariableRef variableRef)) {
-            throw new AsmFrontendException("AsmExpressionLifter currently supports array loads only from local/argument variables");
+            throw new AsmFrontendException("AsmExpressionLifter currently supports array loads only from local/argument variables"
+                    + "; store the array reference in a local slot before loading from it");
         }
         String elementType = elementType(array.javaType, opcode);
         state.stack.push(new StackValue(new GpuIrArrayAccess(variableRef.name(), index.expression), elementType));
@@ -1284,7 +1288,8 @@ public final class AsmExpressionLifter {
         StackValue index = state.popValue();
         StackValue array = state.popValue();
         if (!(array.expression instanceof GpuIrVariableRef variableRef)) {
-            throw new AsmFrontendException("AsmExpressionLifter currently supports array stores only into local/argument variables");
+            throw new AsmFrontendException("AsmExpressionLifter currently supports array stores only into local/argument variables"
+                    + "; store the array reference in a local slot before writing into it");
         }
         state.emit(new GpuIrAssignment(
                 new GpuIrArrayAccess(variableRef.name(), index.expression),

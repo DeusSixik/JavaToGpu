@@ -5,6 +5,20 @@ plugins {
 group = 'net.sixik.ga_utils'
 version = '1.0-SNAPSHOT'
 
+sourceSets {
+    benchmark {
+        java.srcDir 'src/benchmark/java'
+        resources.srcDir 'src/benchmark/resources'
+        compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+        runtimeClasspath += output + compileClasspath
+    }
+}
+
+configurations {
+    benchmarkImplementation.extendsFrom testImplementation
+    benchmarkRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
 def osName = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT)
 def lwjglNatives = osName.contains("win")
         ? "natives-windows"
@@ -134,4 +148,12 @@ tasks.register('performanceStressTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.repeatedStructAndVectorMarshallingRoundsRemainStable'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.repeatedImageAndSamplerMarshallingRoundsRemainStable'
     }
+}
+
+tasks.register('benchmarkTest', Test) {
+    group = 'verification'
+    description = 'Runs manual benchmark scenarios for frontend and runtime performance baselines.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.benchmark.output.classesDirs
+    classpath = sourceSets.benchmark.runtimeClasspath
 }

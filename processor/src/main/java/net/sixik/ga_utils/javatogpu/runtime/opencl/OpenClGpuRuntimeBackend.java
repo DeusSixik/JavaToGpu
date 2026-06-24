@@ -1179,7 +1179,11 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             return;
         }
 
-        throw new IllegalArgumentException("Unsupported OpenCL upload source type: " + binding.sourceArray().getClass().getName());
+        throw new IllegalArgumentException(
+                "Unsupported OpenCL upload source type: "
+                        + binding.sourceArray().getClass().getName()
+                        + "; use supported primitive arrays, vector arrays, struct arrays, or image/sampler wrappers"
+        );
     }
 
     protected void bindBufferArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, Object nativeBuffer) {
@@ -1297,7 +1301,11 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             return;
         }
 
-        throw new IllegalArgumentException("Unsupported OpenCL readback target type: " + binding.sourceArray().getClass().getName());
+        throw new IllegalArgumentException(
+                "Unsupported OpenCL readback target type: "
+                        + binding.sourceArray().getClass().getName()
+                        + "; use supported primitive arrays, vector arrays, struct arrays, or image wrappers"
+        );
     }
 
     /**
@@ -1388,7 +1396,12 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             sessionCreationCount.incrementAndGet();
             return runtimeSession;
         } catch (UnsatisfiedLinkError | IllegalStateException exception) {
-            throw new UnsupportedOperationException("OpenCL runtime is unavailable: " + exception.getMessage(), exception);
+            throw new UnsupportedOperationException(
+                    "OpenCL runtime is unavailable: "
+                            + exception.getMessage()
+                            + "; configure a fallback backend or use GpuRuntime.trySelect(...) when GPU execution is optional",
+                    exception
+            );
         }
     }
 
@@ -1543,6 +1556,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             throw new UnsupportedOperationException(
                     "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
                             + kernelName
+                            + "; add at least one array/vector/struct buffer parameter because explicit work-size configuration is not exposed here yet"
             );
         }
 
@@ -1556,6 +1570,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                                 + expectedLength
                                 + " but found "
                                 + binding.length()
+                                + "; all buffer-style kernel arguments must share the same logical length"
                 );
             }
         }
@@ -1568,6 +1583,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             throw new UnsupportedOperationException(
                     "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
                             + kernelName
+                            + "; add at least one array/vector/struct buffer parameter because explicit work-size configuration is not exposed here yet"
             );
         }
 
@@ -1581,6 +1597,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                                 + expectedLength
                                 + " but found "
                                 + binding.binding().length()
+                                + "; all buffer-style kernel arguments must share the same logical length"
                 );
             }
         }

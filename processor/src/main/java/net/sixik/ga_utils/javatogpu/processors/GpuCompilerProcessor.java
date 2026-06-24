@@ -170,7 +170,9 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             } catch (RuntimeException | IOException exception) {
                 processingEnv.getMessager().printMessage(
                         Diagnostic.Kind.ERROR,
-                        "Failed to compile @GPU method: " + exception.getMessage(),
+                        "Failed to compile @GPU method: "
+                                + exception.getMessage()
+                                + "; see docs/gpu-diagnostics-guide.md for common fixes",
                         method
                 );
             }

@@ -244,19 +244,29 @@ public final class AsmSubsetValidator {
 
     private void validateMethodContract(String ownerInternalName, MethodNode methodNode, AsmValidationConfig config) {
         if ((methodNode.access & Opcodes.ACC_STATIC) == 0) {
-            throw new AsmFrontendException("ASM GPU frontend only supports static methods: " + formatMethod(ownerInternalName, methodNode));
+            throw new AsmFrontendException("ASM GPU frontend only supports static methods: "
+                    + formatMethod(ownerInternalName, methodNode)
+                    + "; rewrite instance state into explicit parameters");
         }
         if ((methodNode.access & Opcodes.ACC_SYNCHRONIZED) != 0) {
-            throw new AsmFrontendException("Synchronized methods are not supported by ASM GPU frontend: " + formatMethod(ownerInternalName, methodNode));
+            throw new AsmFrontendException("Synchronized methods are not supported by ASM GPU frontend: "
+                    + formatMethod(ownerInternalName, methodNode)
+                    + "; remove monitor-based control flow before lowering to GPU ASM");
         }
         if ((methodNode.access & Opcodes.ACC_ABSTRACT) != 0) {
-            throw new AsmFrontendException("Abstract methods are not supported by ASM GPU frontend: " + formatMethod(ownerInternalName, methodNode));
+            throw new AsmFrontendException("Abstract methods are not supported by ASM GPU frontend: "
+                    + formatMethod(ownerInternalName, methodNode)
+                    + "; provide a concrete static implementation");
         }
         if ((methodNode.access & Opcodes.ACC_NATIVE) != 0) {
-            throw new AsmFrontendException("Native methods are not supported by ASM GPU frontend: " + formatMethod(ownerInternalName, methodNode));
+            throw new AsmFrontendException("Native methods are not supported by ASM GPU frontend: "
+                    + formatMethod(ownerInternalName, methodNode)
+                    + "; lower the logic into JVM bytecode first or model it as a helper/intrinsic");
         }
         if (!methodNode.tryCatchBlocks.isEmpty()) {
-            throw new AsmFrontendException("Exception handlers are not supported by ASM GPU frontend: " + formatMethod(ownerInternalName, methodNode));
+            throw new AsmFrontendException("Exception handlers are not supported by ASM GPU frontend: "
+                    + formatMethod(ownerInternalName, methodNode)
+                    + "; rewrite the control flow without try/catch blocks");
         }
 
         validateMethodDescriptor(ownerInternalName, methodNode, config);
@@ -269,6 +279,7 @@ public final class AsmSubsetValidator {
                 throw new AsmFrontendException(
                         "Unsupported ASM method parameter type in " + formatMethod(ownerInternalName, methodNode)
                                 + ": " + argumentType.getDescriptor()
+                                + "; use primitive scalars, single-dimension arrays, supported vectors, pointers, images/samplers, or whitelisted struct values"
                 );
             }
         }
@@ -278,6 +289,7 @@ public final class AsmSubsetValidator {
             throw new AsmFrontendException(
                     "Unsupported ASM method return type in " + formatMethod(ownerInternalName, methodNode)
                             + ": " + returnType.getDescriptor()
+                            + "; use void, primitive scalars, supported vectors, or whitelisted struct values"
             );
         }
     }
@@ -687,6 +699,7 @@ public final class AsmSubsetValidator {
         if (lineNumber >= 0) {
             message.append(", line ").append(lineNumber);
         }
+        message.append("; rewrite the bytecode into the GPU-friendly ASM subset from docs/gpu-friendly-asm-contract.md");
         throw new AsmFrontendException(message.toString());
     }
 

@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenClGpuRuntimeBackendTest {
 
@@ -94,10 +95,10 @@ class OpenClGpuRuntimeBackendTest {
                 () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[0]))
         );
 
-        assertEquals(
-                "OpenCL execution requires at least one buffer argument to derive global work size for kernel kernel",
-                exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains(
+                "OpenCL execution requires at least one buffer argument to derive global work size for kernel kernel"
+        ));
+        assertTrue(exception.getMessage().contains("explicit work-size configuration is not exposed here yet"));
         assertEquals(0, backend.cacheSize());
     }
 
@@ -250,10 +251,10 @@ class OpenClGpuRuntimeBackendTest {
                 ))
         );
 
-        assertEquals(
-                "Mismatched GPU array lengths for kernel kernel: expected 2 but found 1",
-                exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains(
+                "Mismatched GPU array lengths for kernel kernel: expected 2 but found 1"
+        ));
+        assertTrue(exception.getMessage().contains("must share the same logical length"));
         assertEquals(0, executeCalls.get());
         assertEquals(0, backend.cacheSize());
     }
@@ -449,7 +450,8 @@ class OpenClGpuRuntimeBackendTest {
                 () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new float[]{1.0f}}))
         );
 
-        assertEquals("OpenCL runtime is unavailable: LWJGL OpenCL bindings are missing", exception.getMessage());
+        assertTrue(exception.getMessage().contains("OpenCL runtime is unavailable: LWJGL OpenCL bindings are missing"));
+        assertTrue(exception.getMessage().contains("GpuRuntime.trySelect(...)"));
     }
 
     @Test
@@ -480,10 +482,11 @@ class OpenClGpuRuntimeBackendTest {
                 () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new float[]{0.0f}}))
         );
 
-        assertEquals(
-                "OpenCL kernel build failed for kernel kernel on device Fake GPU [javatogpu/sample/Demo/kernel.cl]: driver build log: unknown type name 'half16'; check the generated kernel source and enable ABI debug for layout-sensitive failures",
-                exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains(
+                "OpenCL kernel build failed for kernel kernel on device Fake GPU [javatogpu/sample/Demo/kernel.cl]: driver build log: unknown type name 'half16'"
+        ));
+        assertTrue(exception.getMessage().contains("enable ABI debug"));
+        assertTrue(exception.getMessage().contains("opencl-known-device-quirks.md"));
     }
 
     @Test
@@ -519,10 +522,10 @@ class OpenClGpuRuntimeBackendTest {
                 () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new float[]{0.0f}}))
         );
 
-        assertEquals(
-                "OpenCL kernel execution failed for kernel kernel on device Fake GPU: clEnqueueNDRangeKernel failed: CL_OUT_OF_RESOURCES",
-                exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains(
+                "OpenCL kernel execution failed for kernel kernel on device Fake GPU: clEnqueueNDRangeKernel failed: CL_OUT_OF_RESOURCES"
+        ));
+        assertTrue(exception.getMessage().contains("fallback backend"));
     }
 
     @Test

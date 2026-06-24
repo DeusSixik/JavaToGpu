@@ -147,7 +147,9 @@ class AsmFrontendServiceTest {
                 ))
         );
 
+        assertTrue(exception.getMessage().contains("ASM frontend signature mismatch"));
         assertTrue(exception.getMessage().contains("parameter count"));
+        assertTrue(exception.getMessage().contains("same source/ASM pair"));
     }
 
     @Test

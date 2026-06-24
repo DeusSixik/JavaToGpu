@@ -1,8 +1,11 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUPointerType;
+
 /**
  * Mutable char-by-reference wrapper for GPU helper calls.
  */
+@GPUPointerType(valueType = "char")
 public final class CharPtr {
 
     /**

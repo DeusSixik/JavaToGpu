@@ -1,5 +1,7 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUPointerType;
+
 /**
  * Mutable double-by-reference wrapper for GPU helper calls.
  *
@@ -8,6 +10,7 @@ package net.sixik.ga_utils.javatogpu.api;
  * Helpers.scale(ptr, 2.0);
  * }</pre>
  */
+@GPUPointerType(valueType = "double")
 public final class DoublePtr {
 
     /**

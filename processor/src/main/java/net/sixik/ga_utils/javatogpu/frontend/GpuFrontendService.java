@@ -15,11 +15,8 @@ import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public final class GpuFrontendService {
@@ -117,7 +114,7 @@ public final class GpuFrontendService {
             return List.of();
         }
 
-        Map<String, ParsedGpuStruct> registry = buildStructAliasRegistry(structs);
+        GpuStructAliasRegistry<ParsedGpuStruct> registry = buildStructAliasRegistry(structs);
         LinkedHashSet<String> reachableStructNames = new LinkedHashSet<>();
 
         registerMethodStructReferences(kernelMethod, registry, reachableStructNames);
@@ -126,7 +123,7 @@ public final class GpuFrontendService {
         Deque<String> pending = new ArrayDeque<>(reachableStructNames);
         while (!pending.isEmpty()) {
             String structName = pending.removeFirst();
-            ParsedGpuStruct struct = registry.get(structName);
+            ParsedGpuStruct struct = registry.resolve(structName);
             if (struct == null) {
                 continue;
             }
@@ -139,15 +136,13 @@ public final class GpuFrontendService {
         }
 
         return structs.stream()
-                .filter(struct -> reachableStructNames.contains(struct.ownerQualifiedName())
-                        || reachableStructNames.contains(struct.ownerSimpleName())
-                        || reachableStructNames.contains(GpuTypeSupport.simpleTypeName(struct.ownerSimpleName())))
+                .filter(struct -> reachableStructNames.contains(struct.ownerQualifiedName()))
                 .toList();
     }
 
     private void registerMethodStructReferences(
             ParsedGpuMethod method,
-            Map<String, ParsedGpuStruct> registry,
+            GpuStructAliasRegistry<ParsedGpuStruct> registry,
             Set<String> reachableStructNames
     ) {
         List<String> referencedTypes = new ArrayList<>();
@@ -159,14 +154,14 @@ public final class GpuFrontendService {
         reachableStructNames.addAll(referencedStructNames(referencedTypes, registry));
     }
 
-    private Set<String> referencedStructNames(List<String> referencedTypes, Map<String, ParsedGpuStruct> registry) {
+    private Set<String> referencedStructNames(List<String> referencedTypes, GpuStructAliasRegistry<ParsedGpuStruct> registry) {
         LinkedHashSet<String> structNames = new LinkedHashSet<>();
         for (String referencedType : referencedTypes) {
             String normalizedType = normalizeReferencedType(referencedType);
             if (normalizedType == null) {
                 continue;
             }
-            ParsedGpuStruct struct = registry.get(normalizedType);
+            ParsedGpuStruct struct = registry.resolve(normalizedType);
             if (struct != null) {
                 structNames.add(struct.ownerQualifiedName());
             }
@@ -185,20 +180,12 @@ public final class GpuFrontendService {
         return normalized;
     }
 
-    private Map<String, ParsedGpuStruct> buildStructAliasRegistry(List<ParsedGpuStruct> structs) {
-        Map<String, ParsedGpuStruct> registry = new LinkedHashMap<>();
-        for (ParsedGpuStruct struct : structs) {
-            registerStructAlias(registry, struct.ownerQualifiedName(), struct);
-            registerStructAlias(registry, struct.ownerSimpleName(), struct);
-            registerStructAlias(registry, GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()), struct);
-        }
-        return registry;
-    }
-
-    private void registerStructAlias(Map<String, ParsedGpuStruct> registry, String alias, ParsedGpuStruct struct) {
-        if (alias == null || alias.isBlank()) {
-            return;
-        }
-        registry.putIfAbsent(alias, struct);
+    private GpuStructAliasRegistry<ParsedGpuStruct> buildStructAliasRegistry(List<ParsedGpuStruct> structs) {
+        return GpuStructAliasRegistry.create(
+                structs,
+                ParsedGpuStruct::ownerSimpleName,
+                ParsedGpuStruct::ownerQualifiedName,
+                (left, right) -> left.ownerQualifiedName().equals(right.ownerQualifiedName())
+        );
     }
 }

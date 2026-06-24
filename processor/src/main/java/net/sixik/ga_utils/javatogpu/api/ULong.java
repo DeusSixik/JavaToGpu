@@ -1,10 +1,13 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUScalarAliasType;
+
 /**
  * Java-side wrapper for the OpenCL {@code ulong} scalar type.
  *
  * <p>Java has no unsigned long, so {@link #value} stores the raw 64-bit pattern in a regular {@code long}.
  */
+@GPUScalarAliasType(backendType = "ulong", valueType = "long")
 public final class ULong {
 
     /**

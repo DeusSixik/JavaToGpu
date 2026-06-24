@@ -1,8 +1,11 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUPointerType;
+
 /**
  * Mutable long-by-reference wrapper for GPU helper calls.
  */
+@GPUPointerType(valueType = "long")
 public final class LongPtr {
 
     /**

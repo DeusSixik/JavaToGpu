@@ -32,6 +32,7 @@ import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import net.sixik.ga_utils.javatogpu.frontend.GpuStructAliasRegistry;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuBuiltinConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
@@ -126,7 +127,7 @@ public final class GpuSubsetValidator {
         Map<HelperSignature, List<HelperDescriptor>> helperRegistry = buildHelperRegistry(helperMethods, issues);
         validateGuardedHelperCallbacks(helperMethods, helperRegistry, issues);
         Map<String, List<ConstantDescriptor>> constantRegistry = buildConstantRegistry(kernelMethod, helperMethods, structs, issues);
-        Map<String, StructDescriptor> structRegistry = buildStructRegistry(structs, issues);
+        GpuStructAliasRegistry<StructDescriptor> structRegistry = buildStructRegistry(structs);
         validateStructFieldTypes(structs, structRegistry, issues);
 
         helperMethods.forEach(helperMethod -> validateMethod(helperMethod, helperRegistry, constantRegistry, structRegistry, issues, false));
@@ -141,7 +142,7 @@ public final class GpuSubsetValidator {
             ParsedGpuMethod method,
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
             Map<String, List<ConstantDescriptor>> constantRegistry,
-            Map<String, StructDescriptor> structRegistry,
+            GpuStructAliasRegistry<StructDescriptor> structRegistry,
             List<GpuValidationIssue> issues,
             boolean kernelEntry
     ) {
@@ -242,7 +243,7 @@ public final class GpuSubsetValidator {
             ParsedGpuMethod method,
             List<GpuValidationIssue> issues,
             boolean kernelEntry,
-            Map<String, StructDescriptor> structRegistry
+            GpuStructAliasRegistry<StructDescriptor> structRegistry
     ) {
         if (kernelEntry && !"void".equals(method.returnType())) {
             issues.add(issue(
@@ -271,7 +272,7 @@ public final class GpuSubsetValidator {
             ParsedGpuMethod method,
             List<GpuValidationIssue> issues,
             boolean kernelEntry,
-            Map<String, StructDescriptor> structRegistry
+            GpuStructAliasRegistry<StructDescriptor> structRegistry
     ) {
         method.parameters().forEach(parameter -> {
             String type = parameter.javaType();
@@ -440,7 +441,7 @@ public final class GpuSubsetValidator {
 
     private void validateStructFieldTypes(
             List<ParsedGpuStruct> structs,
-            Map<String, StructDescriptor> structRegistry,
+            GpuStructAliasRegistry<StructDescriptor> structRegistry,
             List<GpuValidationIssue> issues
     ) {
         for (ParsedGpuStruct struct : structs) {
@@ -1065,13 +1066,13 @@ public final class GpuSubsetValidator {
     }
 
     private void validateVariableType(VariableDeclarator variable, List<GpuValidationIssue> issues) {
-        validateVariableType(variable, issues, Map.of());
+        validateVariableType(variable, issues, GpuStructAliasRegistry.empty());
     }
 
     private void validateVariableType(
             VariableDeclarator variable,
             List<GpuValidationIssue> issues,
-            Map<String, StructDescriptor> structRegistry
+            GpuStructAliasRegistry<StructDescriptor> structRegistry
     ) {
         if (!GpuTypeSupport.isSupportedLocalType(variable.getTypeAsString())
                 && !isStructType(variable.getTypeAsString(), structRegistry)) {
@@ -1714,49 +1715,26 @@ public final class GpuSubsetValidator {
         return constantRegistry;
     }
 
-    private Map<String, StructDescriptor> buildStructRegistry(List<ParsedGpuStruct> structs, List<GpuValidationIssue> issues) {
-        Map<String, StructDescriptor> registry = new HashMap<>();
-        for (ParsedGpuStruct struct : structs) {
-            List<StructFieldDescriptor> fields = struct.fields().stream()
-                    .map(field -> new StructFieldDescriptor(field.name(), field.javaType()))
-                    .toList();
-            StructDescriptor descriptor = new StructDescriptor(
-                    struct.ownerSimpleName(),
-                    struct.ownerQualifiedName(),
-                    GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()),
-                    fields
-            );
-            registerStructAlias(registry, descriptor.ownerSimpleName(), descriptor, issues);
-            registerStructAlias(registry, descriptor.ownerQualifiedName(), descriptor, issues);
-            registerStructAlias(registry, descriptor.name(), descriptor, issues);
-        }
-        return registry;
+    private GpuStructAliasRegistry<StructDescriptor> buildStructRegistry(List<ParsedGpuStruct> structs) {
+        return GpuStructAliasRegistry.create(
+                structs.stream()
+                        .map(struct -> new StructDescriptor(
+                                struct.ownerSimpleName(),
+                                struct.ownerQualifiedName(),
+                                GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()),
+                                struct.fields().stream()
+                                        .map(field -> new StructFieldDescriptor(field.name(), field.javaType()))
+                                        .toList()
+                        ))
+                        .toList(),
+                StructDescriptor::ownerSimpleName,
+                StructDescriptor::ownerQualifiedName,
+                (left, right) -> sameOwner(left.ownerSimpleName(), left.ownerQualifiedName(), right.ownerSimpleName(), right.ownerQualifiedName())
+        );
     }
 
-    private void registerStructAlias(
-            Map<String, StructDescriptor> registry,
-            String alias,
-            StructDescriptor descriptor,
-            List<GpuValidationIssue> issues
-    ) {
-        if (alias == null || alias.isBlank()) {
-            return;
-        }
-        StructDescriptor existing = registry.putIfAbsent(alias, descriptor);
-        if (existing != null && !sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), descriptor.ownerSimpleName(), descriptor.ownerQualifiedName())) {
-            issues.add(new GpuValidationIssue(1, 1, "Ambiguous GPU struct type alias: " + alias));
-        }
-    }
-
-    private StructDescriptor resolveStruct(String typeName, Map<String, StructDescriptor> structRegistry) {
-        if (typeName == null) {
-            return null;
-        }
-        StructDescriptor direct = structRegistry.get(typeName);
-        if (direct != null) {
-            return direct;
-        }
-        return structRegistry.get(GpuTypeSupport.simpleTypeName(typeName));
+    private StructDescriptor resolveStruct(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
+        return structRegistry.resolve(typeName);
     }
 
     private StructFieldDescriptor resolveStructField(StructDescriptor struct, String fieldName) {
@@ -1766,11 +1744,11 @@ public final class GpuSubsetValidator {
                 .orElse(null);
     }
 
-    private boolean isStructType(String typeName, Map<String, StructDescriptor> structRegistry) {
+    private boolean isStructType(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         return resolveStruct(typeName, structRegistry) != null;
     }
 
-    private boolean isStructArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+    private boolean isStructArrayType(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         return GpuTypeSupport.isArrayType(typeName)
                 && isStructType(GpuTypeSupport.componentType(GpuTypeSupport.declaredType(typeName)), structRegistry);
     }
@@ -1780,15 +1758,15 @@ public final class GpuSubsetValidator {
                 && GpuTypeSupport.isSupportedVectorType(GpuTypeSupport.componentType(GpuTypeSupport.declaredType(typeName)));
     }
 
-    private boolean isPackedArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+    private boolean isPackedArrayType(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         return isStructArrayType(typeName, structRegistry) || isVectorArrayType(typeName);
     }
 
-    private boolean isSupportedArrayParameterType(String typeName, Map<String, StructDescriptor> structRegistry) {
+    private boolean isSupportedArrayParameterType(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         return GpuTypeSupport.isSupportedArrayType(typeName) || isPackedArrayType(typeName, structRegistry);
     }
 
-    private boolean isInferableArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+    private boolean isInferableArrayType(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         if (!GpuTypeSupport.isArrayType(typeName)) {
             return false;
         }
@@ -1798,7 +1776,7 @@ public final class GpuSubsetValidator {
                 || isStructType(componentType, structRegistry);
     }
 
-    private boolean isStructAssignmentCompatible(String actualType, String targetType, Map<String, StructDescriptor> structRegistry) {
+    private boolean isStructAssignmentCompatible(String actualType, String targetType, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         if (actualType == null || targetType == null) {
             return false;
         }
@@ -1865,7 +1843,7 @@ public final class GpuSubsetValidator {
             String ownerQualifiedName,
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
             Map<String, List<ConstantDescriptor>> constantRegistry,
-            Map<String, StructDescriptor> structRegistry
+            GpuStructAliasRegistry<StructDescriptor> structRegistry
     ) {
     }
 

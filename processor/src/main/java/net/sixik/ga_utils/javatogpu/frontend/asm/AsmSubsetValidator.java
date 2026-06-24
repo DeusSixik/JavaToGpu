@@ -614,12 +614,14 @@ public final class AsmSubsetValidator {
 
     private boolean isAllowedConstructorOwner(String ownerInternalName, AsmValidationConfig config) {
         return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName)
+                || isBuiltInPointerOrScalarAliasOwner(ownerInternalName)
                 || isBuiltInVectorOwner(ownerInternalName)
                 || config.allowedStructOwners().contains(ownerInternalName);
     }
 
     private boolean isAllowedFieldOwner(String ownerInternalName, AsmValidationConfig config) {
         return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName)
+                || isBuiltInPointerOrScalarAliasOwner(ownerInternalName)
                 || isBuiltInVectorOwner(ownerInternalName)
                 || config.allowedStructOwners().contains(ownerInternalName);
     }
@@ -647,14 +649,22 @@ public final class AsmSubsetValidator {
 
     private boolean isSupportedObjectType(String ownerInternalName, AsmValidationConfig config) {
         return BUILTIN_VALUE_OWNERS.contains(ownerInternalName)
+                || isBuiltInPointerOrScalarAliasOwner(ownerInternalName)
                 || isBuiltInVectorOwner(ownerInternalName)
                 || config.allowedStructOwners().contains(ownerInternalName);
     }
 
     private boolean isAllowedArrayObjectElementOwner(String ownerInternalName, AsmValidationConfig config) {
         return BUILTIN_CONSTRUCTOR_OWNERS.contains(ownerInternalName)
+                || isBuiltInPointerOrScalarAliasOwner(ownerInternalName)
                 || isBuiltInVectorOwner(ownerInternalName)
                 || config.allowedStructOwners().contains(ownerInternalName);
+    }
+
+    private boolean isBuiltInPointerOrScalarAliasOwner(String ownerInternalName) {
+        String className = ownerInternalName.replace('/', '.');
+        return GpuTypeSupport.isSupportedPointerClassName(className)
+                || GpuTypeSupport.isSupportedScalarAliasClassName(className);
     }
 
     private boolean isBuiltInVectorOwner(String ownerInternalName) {

@@ -1,5 +1,7 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUPointerType;
+
 /**
  * Mutable byte-by-reference wrapper for GPU helper calls.
  *
@@ -10,6 +12,7 @@ package net.sixik.ga_utils.javatogpu.api;
  * Helpers.bump(ptr);
  * }</pre>
  */
+@GPUPointerType(valueType = "byte")
 public final class BytePtr {
 
     /**

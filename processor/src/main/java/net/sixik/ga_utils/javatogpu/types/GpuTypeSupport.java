@@ -1,5 +1,7 @@
 package net.sixik.ga_utils.javatogpu.types;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUPointerType;
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUScalarAliasType;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUVectorType;
 
 import java.util.ArrayList;
@@ -15,31 +17,16 @@ public final class GpuTypeSupport {
     private static final String POINTER_REFERENCE_SUFFIX = "&";
 
     private static final Set<String> SUPPORTED_SCALAR_TYPES = Set.of(
-            "byte", "short", "int", "long", "float", "double", "boolean", "char",
-            "UByte", "UShort", "UInt", "ULong"
+            "byte", "short", "int", "long", "float", "double", "boolean", "char"
     );
 
     private static final Set<String> SUPPORTED_PARAMETER_SCALAR_TYPES = Set.of(
-            "byte", "short", "int", "long", "float", "double", "char",
-            "UByte", "UShort", "UInt", "ULong"
+            "byte", "short", "int", "long", "float", "double", "char"
     );
 
-    private static final Map<String, ScalarAliasDescriptor> SUPPORTED_SCALAR_ALIASES = Map.of(
-            "UByte", new ScalarAliasDescriptor("uchar", "byte"),
-            "UShort", new ScalarAliasDescriptor("ushort", "short"),
-            "UInt", new ScalarAliasDescriptor("uint", "int"),
-            "ULong", new ScalarAliasDescriptor("ulong", "long")
-    );
+    private static final Map<String, ScalarAliasDescriptor> SUPPORTED_SCALAR_ALIASES = new ConcurrentHashMap<>();
 
-    private static final Map<String, String> SUPPORTED_POINTER_TYPES = Map.of(
-            "BytePtr", "byte",
-            "CharPtr", "char",
-            "ShortPtr", "short",
-            "IntPtr", "int",
-            "LongPtr", "long",
-            "FloatPtr", "float",
-            "DoublePtr", "double"
-    );
+    private static final Map<String, PointerDescriptor> SUPPORTED_POINTER_TYPES = new ConcurrentHashMap<>();
 
     private static final Map<String, VectorDescriptor> SUPPORTED_VECTOR_TYPES = new ConcurrentHashMap<>();
 
@@ -60,6 +47,34 @@ public final class GpuTypeSupport {
     );
 
     private GpuTypeSupport() {
+    }
+
+    public static void registerAnnotatedPointerType(Class<?> pointerType) {
+        if (pointerType == null) {
+            throw new IllegalArgumentException("pointerType cannot be null");
+        }
+        GPUPointerType annotation = pointerType.getAnnotation(GPUPointerType.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Type is not annotated with @GPUPointerType: " + pointerType.getName());
+        }
+
+        PointerDescriptor descriptor = new PointerDescriptor(annotation.valueType());
+        registerPointerAlias(pointerType.getSimpleName(), descriptor);
+        registerPointerAlias(pointerType.getName(), descriptor);
+    }
+
+    public static void registerAnnotatedScalarAliasType(Class<?> scalarAliasType) {
+        if (scalarAliasType == null) {
+            throw new IllegalArgumentException("scalarAliasType cannot be null");
+        }
+        GPUScalarAliasType annotation = scalarAliasType.getAnnotation(GPUScalarAliasType.class);
+        if (annotation == null) {
+            throw new IllegalArgumentException("Type is not annotated with @GPUScalarAliasType: " + scalarAliasType.getName());
+        }
+
+        ScalarAliasDescriptor descriptor = new ScalarAliasDescriptor(annotation.backendType(), annotation.valueType());
+        registerScalarAlias(scalarAliasType.getSimpleName(), descriptor);
+        registerScalarAlias(scalarAliasType.getName(), descriptor);
     }
 
     public static void registerAnnotatedVectorType(Class<?> vectorType) {
@@ -102,24 +117,44 @@ public final class GpuTypeSupport {
         return vectorDescriptor(className) != null;
     }
 
+    public static boolean isSupportedPointerClassName(String className) {
+        if (className == null || className.isBlank()) {
+            return false;
+        }
+        return pointerDescriptor(className) != null;
+    }
+
+    public static boolean isSupportedScalarAliasClassName(String className) {
+        if (className == null || className.isBlank()) {
+            return false;
+        }
+        return scalarAliasDescriptor(className) != null;
+    }
+
     public static boolean isSupportedScalarType(String javaType) {
-        return SUPPORTED_SCALAR_TYPES.contains(declaredType(javaType));
+        String declaredType = declaredType(javaType);
+        return SUPPORTED_SCALAR_TYPES.contains(declaredType) || isSupportedScalarAliasType(declaredType);
     }
 
     public static boolean isIntegralScalarType(String javaType) {
-        return "byte".equals(javaType)
-                || "char".equals(javaType)
-                || "short".equals(javaType)
-                || "int".equals(javaType)
-                || "long".equals(javaType);
+        String declaredType = declaredType(javaType);
+        if ("byte".equals(declaredType)
+                || "char".equals(declaredType)
+                || "short".equals(declaredType)
+                || "int".equals(declaredType)
+                || "long".equals(declaredType)) {
+            return true;
+        }
+        return isSupportedScalarAliasType(declaredType)
+                && isIntegralScalarType(scalarAliasValueType(declaredType));
     }
 
     public static boolean isSupportedScalarAliasType(String javaType) {
-        return SUPPORTED_SCALAR_ALIASES.containsKey(simpleTypeName(declaredType(javaType)));
+        return scalarAliasDescriptor(javaType) != null;
     }
 
     public static String scalarAliasValueType(String javaType) {
-        ScalarAliasDescriptor descriptor = SUPPORTED_SCALAR_ALIASES.get(simpleTypeName(declaredType(javaType)));
+        ScalarAliasDescriptor descriptor = scalarAliasDescriptor(javaType);
         if (descriptor == null) {
             throw new IllegalArgumentException("Unsupported scalar alias type: " + javaType);
         }
@@ -127,7 +162,7 @@ public final class GpuTypeSupport {
     }
 
     public static String openClScalarAliasTypeName(String javaType) {
-        ScalarAliasDescriptor descriptor = SUPPORTED_SCALAR_ALIASES.get(simpleTypeName(declaredType(javaType)));
+        ScalarAliasDescriptor descriptor = scalarAliasDescriptor(javaType);
         if (descriptor == null) {
             throw new IllegalArgumentException("Unsupported scalar alias type: " + javaType);
         }
@@ -135,12 +170,17 @@ public final class GpuTypeSupport {
     }
 
     public static boolean isFloatingScalarType(String javaType) {
-        return "float".equals(javaType) || "double".equals(javaType);
+        String declaredType = declaredType(javaType);
+        if ("float".equals(declaredType) || "double".equals(declaredType)) {
+            return true;
+        }
+        return isSupportedScalarAliasType(declaredType)
+                && isFloatingScalarType(scalarAliasValueType(declaredType));
     }
 
     public static boolean isSupportedArrayType(String javaType) {
         String declaredType = declaredType(javaType);
-        return declaredType.endsWith("[]") && SUPPORTED_PARAMETER_SCALAR_TYPES.contains(componentType(declaredType));
+        return declaredType.endsWith("[]") && isSupportedParameterScalarType(componentType(declaredType));
     }
 
     public static boolean isArrayType(String javaType) {
@@ -149,7 +189,7 @@ public final class GpuTypeSupport {
     }
 
     public static boolean isSupportedKernelParameterType(String javaType) {
-        return SUPPORTED_PARAMETER_SCALAR_TYPES.contains(javaType)
+        return isSupportedParameterScalarType(javaType)
                 || isSupportedArrayType(javaType)
                 || isSupportedVectorType(javaType)
                 || isSupportedImageOrSamplerType(javaType);
@@ -230,7 +270,7 @@ public final class GpuTypeSupport {
     }
 
     public static boolean isSupportedPointerType(String javaType) {
-        return SUPPORTED_POINTER_TYPES.containsKey(simpleTypeName(declaredType(javaType)));
+        return pointerDescriptor(javaType) != null;
     }
 
     public static boolean isSupportedVectorType(String javaType) {
@@ -282,11 +322,11 @@ public final class GpuTypeSupport {
     }
 
     public static String pointerValueType(String javaType) {
-        String valueType = SUPPORTED_POINTER_TYPES.get(simpleTypeName(declaredType(javaType)));
-        if (valueType == null) {
+        PointerDescriptor descriptor = pointerDescriptor(javaType);
+        if (descriptor == null) {
             throw new IllegalArgumentException("Unsupported pointer type: " + javaType);
         }
-        return valueType;
+        return descriptor.valueType();
     }
 
     public static String parameterStorageType(String javaType) {
@@ -325,17 +365,22 @@ public final class GpuTypeSupport {
     }
 
     public static int scalarByteSize(String javaType) {
-        return switch (declaredType(javaType)) {
+        String declaredType = declaredType(javaType);
+        if (isSupportedScalarAliasType(declaredType)) {
+            return scalarByteSize(scalarAliasValueType(declaredType));
+        }
+        return switch (declaredType) {
             case "byte", "boolean" -> Byte.BYTES;
             case "short", "char" -> Short.BYTES;
             case "int", "float" -> Integer.BYTES;
             case "long", "double" -> Long.BYTES;
-            case "UByte" -> Byte.BYTES;
-            case "UShort" -> Short.BYTES;
-            case "UInt" -> Integer.BYTES;
-            case "ULong" -> Long.BYTES;
             default -> throw new IllegalArgumentException("Unsupported scalar type size lookup: " + javaType);
         };
+    }
+
+    private static boolean isSupportedParameterScalarType(String javaType) {
+        String declaredType = declaredType(javaType);
+        return SUPPORTED_PARAMETER_SCALAR_TYPES.contains(declaredType) || isSupportedScalarAliasType(declaredType);
     }
 
     private static boolean isPointerReferenceStorageSuffix(String javaType) {
@@ -365,6 +410,52 @@ public final class GpuTypeSupport {
         return SUPPORTED_VECTOR_TYPES.get(simpleTypeName(declaredType));
     }
 
+    private static PointerDescriptor pointerDescriptor(String javaType) {
+        String declaredType = declaredType(javaType);
+        if (declaredType == null) {
+            return null;
+        }
+        PointerDescriptor descriptor = SUPPORTED_POINTER_TYPES.get(declaredType);
+        if (descriptor != null) {
+            return descriptor;
+        }
+
+        descriptor = SUPPORTED_POINTER_TYPES.get(simpleTypeName(declaredType));
+        if (descriptor != null) {
+            return descriptor;
+        }
+
+        tryRegisterAnnotatedPointerType(declaredType);
+        descriptor = SUPPORTED_POINTER_TYPES.get(declaredType);
+        if (descriptor != null) {
+            return descriptor;
+        }
+        return SUPPORTED_POINTER_TYPES.get(simpleTypeName(declaredType));
+    }
+
+    private static ScalarAliasDescriptor scalarAliasDescriptor(String javaType) {
+        String declaredType = declaredType(javaType);
+        if (declaredType == null) {
+            return null;
+        }
+        ScalarAliasDescriptor descriptor = SUPPORTED_SCALAR_ALIASES.get(declaredType);
+        if (descriptor != null) {
+            return descriptor;
+        }
+
+        descriptor = SUPPORTED_SCALAR_ALIASES.get(simpleTypeName(declaredType));
+        if (descriptor != null) {
+            return descriptor;
+        }
+
+        tryRegisterAnnotatedScalarAliasType(declaredType);
+        descriptor = SUPPORTED_SCALAR_ALIASES.get(declaredType);
+        if (descriptor != null) {
+            return descriptor;
+        }
+        return SUPPORTED_SCALAR_ALIASES.get(simpleTypeName(declaredType));
+    }
+
     private static void registerVectorAlias(String alias, VectorDescriptor descriptor) {
         if (alias == null || alias.isBlank()) {
             return;
@@ -372,8 +463,22 @@ public final class GpuTypeSupport {
         SUPPORTED_VECTOR_TYPES.putIfAbsent(alias, descriptor);
     }
 
+    private static void registerPointerAlias(String alias, PointerDescriptor descriptor) {
+        if (alias == null || alias.isBlank()) {
+            return;
+        }
+        SUPPORTED_POINTER_TYPES.putIfAbsent(alias, descriptor);
+    }
+
+    private static void registerScalarAlias(String alias, ScalarAliasDescriptor descriptor) {
+        if (alias == null || alias.isBlank()) {
+            return;
+        }
+        SUPPORTED_SCALAR_ALIASES.putIfAbsent(alias, descriptor);
+    }
+
     private static void tryRegisterAnnotatedVectorType(String declaredType) {
-        for (String candidate : candidateVectorClassNames(declaredType)) {
+        for (String candidate : candidateAnnotatedTypeClassNames(declaredType)) {
             try {
                 Class<?> type = Class.forName(candidate, false, GpuTypeSupport.class.getClassLoader());
                 if (type.isAnnotationPresent(GPUVectorType.class)) {
@@ -385,7 +490,33 @@ public final class GpuTypeSupport {
         }
     }
 
-    private static List<String> candidateVectorClassNames(String declaredType) {
+    private static void tryRegisterAnnotatedPointerType(String declaredType) {
+        for (String candidate : candidateAnnotatedTypeClassNames(declaredType)) {
+            try {
+                Class<?> type = Class.forName(candidate, false, GpuTypeSupport.class.getClassLoader());
+                if (type.isAnnotationPresent(GPUPointerType.class)) {
+                    registerAnnotatedPointerType(type);
+                }
+            } catch (ClassNotFoundException ignored) {
+                // Best effort lookup for optional pointer extensions.
+            }
+        }
+    }
+
+    private static void tryRegisterAnnotatedScalarAliasType(String declaredType) {
+        for (String candidate : candidateAnnotatedTypeClassNames(declaredType)) {
+            try {
+                Class<?> type = Class.forName(candidate, false, GpuTypeSupport.class.getClassLoader());
+                if (type.isAnnotationPresent(GPUScalarAliasType.class)) {
+                    registerAnnotatedScalarAliasType(type);
+                }
+            } catch (ClassNotFoundException ignored) {
+                // Best effort lookup for optional scalar alias extensions.
+            }
+        }
+    }
+
+    private static List<String> candidateAnnotatedTypeClassNames(String declaredType) {
         List<String> candidates = new ArrayList<>();
         candidates.add(declaredType);
         if (!declaredType.contains(".")) {
@@ -423,6 +554,9 @@ public final class GpuTypeSupport {
             List<String> fieldNames,
             int storageWidth
     ) {
+    }
+
+    private record PointerDescriptor(String valueType) {
     }
 
     private record ScalarAliasDescriptor(

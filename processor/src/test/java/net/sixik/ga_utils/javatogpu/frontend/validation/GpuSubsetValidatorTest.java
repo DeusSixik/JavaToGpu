@@ -347,7 +347,7 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
-    void rejectsAddressSpaceAnnotationsOnHelperParameters() {
+    void acceptsAddressSpaceAnnotationsOnHelperParameters() {
         String kernelSource = """
                 @GPU
                 void kernel(@GPUGlobal float[] output) {
@@ -360,10 +360,10 @@ class GpuSubsetValidatorTest {
                 }
                 """;
 
-        assertThrows(
-                GpuValidationException.class,
-                () -> validator.validateKernel(parser.parseMethod(kernelSource), java.util.List.of(parser.parseMethod(helperSource)))
-        );
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(kernelSource),
+                java.util.List.of(parser.parseMethod(helperSource))
+        ));
     }
 
     @Test

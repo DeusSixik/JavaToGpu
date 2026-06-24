@@ -30,6 +30,7 @@ import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import net.sixik.ga_utils.javatogpu.frontend.GpuStructAliasRegistry;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsic;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuBuiltinConstant;
@@ -101,7 +102,7 @@ public final class GpuIrLowerer {
     }
 
     public GpuIrMethod lower(ParsedGpuMethod method) {
-        return lower(method, Map.of(), buildConstantRegistry(method, List.of(), List.of()), Map.of());
+        return lower(method, Map.of(), buildConstantRegistry(method, List.of(), List.of()), GpuStructAliasRegistry.empty());
     }
 
     public List<GpuIrCompiledMethod> lower(ParsedGpuMethod kernelMethod, List<ParsedGpuMethod> helperMethods) {
@@ -115,7 +116,7 @@ public final class GpuIrLowerer {
     ) {
         Map<HelperSignature, List<HelperDescriptor>> helperRegistry = buildHelperRegistry(helperMethods);
         Map<String, List<ConstantDescriptor>> constantRegistry = buildConstantRegistry(kernelMethod, helperMethods, structs);
-        Map<String, StructDescriptor> structRegistry = buildStructRegistry(structs);
+        GpuStructAliasRegistry<StructDescriptor> structRegistry = buildStructRegistry(structs);
         List<GpuIrCompiledMethod> loweredHelpers = helperMethods.stream()
                 .map(helperMethod -> compileMethod(helperMethod, helperRegistry, constantRegistry, structRegistry, false))
                 .toList();
@@ -130,7 +131,7 @@ public final class GpuIrLowerer {
             ParsedGpuMethod method,
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
             Map<String, List<ConstantDescriptor>> constantRegistry,
-            Map<String, StructDescriptor> structRegistry,
+            GpuStructAliasRegistry<StructDescriptor> structRegistry,
             boolean kernelEntry
     ) {
         GpuIrMethod loweredMethod = lower(method, helperRegistry, constantRegistry, structRegistry);
@@ -164,7 +165,7 @@ public final class GpuIrLowerer {
             ParsedGpuMethod method,
             Map<HelperSignature, List<HelperDescriptor>> helperRegistry,
             Map<String, List<ConstantDescriptor>> constantRegistry,
-            Map<String, StructDescriptor> structRegistry
+            GpuStructAliasRegistry<StructDescriptor> structRegistry
     ) {
         Deque<Map<String, String>> scopes = new ArrayDeque<>();
         scopes.push(new HashMap<>());
@@ -969,33 +970,26 @@ public final class GpuIrLowerer {
         return constantRegistry;
     }
 
-    private Map<String, StructDescriptor> buildStructRegistry(List<ParsedGpuStruct> structs) {
-        Map<String, StructDescriptor> registry = new HashMap<>();
-        for (ParsedGpuStruct struct : structs) {
-            StructDescriptor descriptor = new StructDescriptor(
-                    struct.ownerSimpleName(),
-                    struct.ownerQualifiedName(),
-                    GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()),
-                    struct.fields().stream()
-                            .map(field -> new StructFieldDescriptor(field.name(), field.javaType()))
-                            .toList()
-            );
-            registry.putIfAbsent(descriptor.ownerSimpleName(), descriptor);
-            registry.putIfAbsent(descriptor.ownerQualifiedName(), descriptor);
-            registry.putIfAbsent(descriptor.name(), descriptor);
-        }
-        return registry;
+    private GpuStructAliasRegistry<StructDescriptor> buildStructRegistry(List<ParsedGpuStruct> structs) {
+        return GpuStructAliasRegistry.create(
+                structs.stream()
+                        .map(struct -> new StructDescriptor(
+                                struct.ownerSimpleName(),
+                                struct.ownerQualifiedName(),
+                                GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()),
+                                struct.fields().stream()
+                                        .map(field -> new StructFieldDescriptor(field.name(), field.javaType()))
+                                        .toList()
+                        ))
+                        .toList(),
+                StructDescriptor::ownerSimpleName,
+                StructDescriptor::ownerQualifiedName,
+                (left, right) -> sameOwner(left.ownerSimpleName(), left.ownerQualifiedName(), right.ownerSimpleName(), right.ownerQualifiedName())
+        );
     }
 
-    private StructDescriptor resolveStruct(String typeName, Map<String, StructDescriptor> structRegistry) {
-        if (typeName == null) {
-            return null;
-        }
-        StructDescriptor direct = structRegistry.get(typeName);
-        if (direct != null) {
-            return direct;
-        }
-        return structRegistry.get(GpuTypeSupport.simpleTypeName(typeName));
+    private StructDescriptor resolveStruct(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
+        return structRegistry.resolve(typeName);
     }
 
     private StructFieldDescriptor resolveStructField(StructDescriptor struct, String fieldName) {
@@ -1005,7 +999,7 @@ public final class GpuIrLowerer {
                 .orElse(null);
     }
 
-    private boolean isInferableArrayType(String typeName, Map<String, StructDescriptor> structRegistry) {
+    private boolean isInferableArrayType(String typeName, GpuStructAliasRegistry<StructDescriptor> structRegistry) {
         if (!GpuTypeSupport.isArrayType(typeName)) {
             return false;
         }
@@ -1364,7 +1358,7 @@ public final class GpuIrLowerer {
             String ownerSimpleName,
             String ownerQualifiedName,
             Map<String, List<ConstantDescriptor>> constantRegistry,
-            Map<String, StructDescriptor> structRegistry
+            GpuStructAliasRegistry<StructDescriptor> structRegistry
     ) {
     }
 

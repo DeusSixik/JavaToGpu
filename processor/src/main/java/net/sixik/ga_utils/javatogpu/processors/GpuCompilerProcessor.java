@@ -18,6 +18,7 @@ import net.sixik.ga_utils.javatogpu.api.anotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUGlobal;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPULocal;
 import net.sixik.ga_utils.javatogpu.frontend.GpuFrontendService;
+import net.sixik.ga_utils.javatogpu.frontend.GpuStructAliasRegistry;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
@@ -247,7 +248,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 .filter(candidate -> !candidate.equals(kernelElement))
                 .filter(this::isSupportedHelperMethod)
                 .map(this::parseMethod)
-                .filter(helper -> isReachableHelperOwner(helper, reachableOwners))
+                .filter(helper -> isReachableHelperOwner(helper, kernelMethod, reachableOwners))
                 .toList();
 
         Map<String, ParsedGpuMethod> helpers = new LinkedHashMap<>();
@@ -299,7 +300,15 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         return List.copyOf(loadedHelpers.values());
     }
 
-    private boolean isReachableHelperOwner(ParsedGpuMethod helper, Set<String> reachableOwners) {
+    private boolean isReachableHelperOwner(
+            ParsedGpuMethod helper,
+            ParsedGpuMethod kernelMethod,
+            Set<String> reachableOwners
+    ) {
+        if (helper.ownerQualifiedName().equals(kernelMethod.ownerQualifiedName())
+                || helper.ownerSimpleName().equals(kernelMethod.ownerSimpleName())) {
+            return true;
+        }
         if (reachableOwners.isEmpty()) {
             return false;
         }
@@ -1128,12 +1137,12 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 .append(kernelMethod.name())
                 .append(":\n");
 
-        Map<String, ParsedGpuStruct> structRegistry = new LinkedHashMap<>();
-        for (ParsedGpuStruct struct : structs) {
-            structRegistry.put(struct.ownerQualifiedName(), struct);
-            structRegistry.put(struct.ownerSimpleName(), struct);
-            structRegistry.put(GpuTypeSupport.simpleTypeName(struct.ownerSimpleName()), struct);
-        }
+        GpuStructAliasRegistry<ParsedGpuStruct> structRegistry = GpuStructAliasRegistry.create(
+                structs,
+                ParsedGpuStruct::ownerSimpleName,
+                ParsedGpuStruct::ownerQualifiedName,
+                (left, right) -> left.ownerQualifiedName().equals(right.ownerQualifiedName())
+        );
 
         for (var parameter : kernelMethod.parameters()) {
             builder.append("- ")
@@ -1151,7 +1160,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     private void appendSourceAbiHint(
             StringBuilder builder,
             String javaType,
-            Map<String, ParsedGpuStruct> structRegistry,
+            GpuStructAliasRegistry<ParsedGpuStruct> structRegistry,
             int indent,
             Set<String> activeTypes
     ) {
@@ -1209,14 +1218,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         activeTypes.remove(struct.ownerQualifiedName());
     }
 
-    private ParsedGpuStruct resolveParsedStruct(String typeName, Map<String, ParsedGpuStruct> structRegistry) {
-        if (typeName == null) {
-            return null;
-        }
-        ParsedGpuStruct direct = structRegistry.get(typeName);
-        if (direct != null) {
-            return direct;
-        }
-        return structRegistry.get(GpuTypeSupport.simpleTypeName(typeName));
+    private ParsedGpuStruct resolveParsedStruct(String typeName, GpuStructAliasRegistry<ParsedGpuStruct> structRegistry) {
+        return structRegistry.resolve(typeName);
     }
 }

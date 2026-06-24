@@ -1,10 +1,13 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUScalarAliasType;
+
 /**
  * Java-side wrapper for the OpenCL {@code ushort} scalar type.
  *
  * <p>Java has no unsigned short, so {@link #value} stores the raw 16-bit pattern in a regular {@code short}.
  */
+@GPUScalarAliasType(backendType = "ushort", valueType = "short")
 public final class UShort {
 
     /**

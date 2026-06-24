@@ -1,5 +1,7 @@
 package net.sixik.ga_utils.javatogpu.api;
 
+import net.sixik.ga_utils.javatogpu.api.anotations.GPUPointerType;
+
 /**
  * Mutable float-by-reference wrapper for GPU helper calls.
  *
@@ -9,6 +11,7 @@ package net.sixik.ga_utils.javatogpu.api;
  * float value = ptr.value;
  * }</pre>
  */
+@GPUPointerType(valueType = "float")
 public final class FloatPtr {
 
     /**

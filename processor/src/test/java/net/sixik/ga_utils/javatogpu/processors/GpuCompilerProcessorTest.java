@@ -3522,7 +3522,7 @@ class GpuCompilerProcessorTest {
     }
 
     @Test
-    void rejectsAmbiguousGpuStructTypeAliases() throws IOException {
+    void acceptsQualifiedGpuStructTypeWhenSimpleAliasesCollide() throws IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         Path classOutputDir = Files.createTempDirectory("javatogpu-struct-alias-error-classes");
         Path generatedOutputDir = Files.createTempDirectory("javatogpu-struct-alias-error-generated");
@@ -3575,12 +3575,15 @@ class GpuCompilerProcessorTest {
             );
             task.setProcessors(List.of(new GpuCompilerProcessor()));
 
-            assertFalse(task.call());
+            assertTrue(task.call());
         }
 
-        assertTrue(diagnostics.getDiagnostics().stream().anyMatch(diagnostic ->
-                String.valueOf(diagnostic.getMessage(null)).contains("Ambiguous GPU struct type alias: Point")
-        ));
+        Path kernelPath = generatedOutputDir.resolve("javatogpu/sample/Demo/kernel.cl");
+        assertTrue(Files.exists(kernelPath));
+
+        String kernelSource = Files.readString(kernelPath);
+        assertTrue(kernelSource.contains("float x;"));
+        assertFalse(kernelSource.contains("float y;"));
     }
 
     @Test

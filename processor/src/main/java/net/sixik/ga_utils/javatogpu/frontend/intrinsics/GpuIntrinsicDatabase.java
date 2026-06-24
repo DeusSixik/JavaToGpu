@@ -10,6 +10,7 @@ import net.sixik.ga_utils.javatogpu.api.GpuBackendTarget;
 import net.sixik.ga_utils.javatogpu.api.anotations.GPUIntrinsic;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
+import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Field;
@@ -29,16 +30,13 @@ public final class GpuIntrinsicDatabase {
 
     private final Map<String, List<GpuIntrinsic>> intrinsics;
     private final List<GpuBuiltinConstant> builtinConstants;
-    private final Set<String> allowedAllocationTypes;
 
     private GpuIntrinsicDatabase(
             Map<String, List<GpuIntrinsic>> intrinsics,
-            List<GpuBuiltinConstant> builtinConstants,
-            Set<String> allowedAllocationTypes
+            List<GpuBuiltinConstant> builtinConstants
     ) {
         this.intrinsics = intrinsics;
         this.builtinConstants = builtinConstants;
-        this.allowedAllocationTypes = allowedAllocationTypes;
     }
 
     public static GpuIntrinsicDatabase createDefault() {
@@ -64,8 +62,7 @@ public final class GpuIntrinsicDatabase {
                         Map.Entry::getKey,
                         entry -> List.copyOf(entry.getValue())
                 )),
-                List.copyOf(builtinConstants),
-                Set.of("BytePtr", "CharPtr", "ShortPtr", "IntPtr", "LongPtr", "FloatPtr", "DoublePtr", "UByte", "UShort", "UInt", "ULong")
+                List.copyOf(builtinConstants)
         );
     }
 
@@ -99,7 +96,8 @@ public final class GpuIntrinsicDatabase {
     }
 
     public boolean isAllowedAllocationType(String typeName) {
-        return allowedAllocationTypes.contains(typeName);
+        return GpuTypeSupport.isSupportedPointerType(typeName)
+                || GpuTypeSupport.isSupportedScalarAliasType(typeName);
     }
 
     public List<GpuBuiltinConstant> builtinConstants() {

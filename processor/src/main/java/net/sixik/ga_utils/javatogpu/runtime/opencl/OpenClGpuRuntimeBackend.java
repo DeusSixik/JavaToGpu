@@ -28,6 +28,7 @@ import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeBackend;
 import java.util.Objects;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -82,6 +83,11 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
     private final OpenClDeviceBufferRegistry bufferRegistry = new OpenClDeviceBufferRegistry();
     private final OpenClExecutionPreparer executionPreparer = new OpenClExecutionPreparer(bufferRegistry);
     private final Map<String, Object> nativeBuffers = new ConcurrentHashMap<>();
+    private final AtomicLong invocationCount = new AtomicLong();
+    private final AtomicLong compileCount = new AtomicLong();
+    private final AtomicLong compileCacheHitCount = new AtomicLong();
+    private final AtomicLong sessionCreationCount = new AtomicLong();
+    private final AtomicLong deviceBufferCreationCount = new AtomicLong();
     private volatile OpenClRuntimeSession session;
     private volatile OpenClRuntimeCapabilities capabilities;
 
@@ -175,6 +181,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     @Override
     public final void invoke(GpuKernelInvocation invocation) {
+        invocationCount.incrementAndGet();
         if (OpenClAbiDebug.enabled()) {
             System.err.println(OpenClAbiDebug.describeInvocation(invocation.descriptor(), invocation.arguments()));
         }
@@ -182,11 +189,41 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(arguments);
         validateInvocationPreconditions(invocation.descriptor(), plan);
         validateCapabilitySupport(invocation.descriptor(), plan);
-        OpenClCompiledKernel compiledKernel = compiledKernelCache().computeIfAbsent(
-                invocation.descriptor(),
-                this::compileKernelChecked
-        );
+        Map<GpuKernelDescriptor, OpenClCompiledKernel> kernelCache = compiledKernelCache();
+        OpenClCompiledKernel compiledKernel = kernelCache.get(invocation.descriptor());
+        if (compiledKernel != null) {
+            compileCacheHitCount.incrementAndGet();
+        } else {
+            compiledKernel = kernelCache.computeIfAbsent(invocation.descriptor(), this::compileKernelChecked);
+        }
         executeKernelChecked(executionPreparer.prepare(compiledKernel, plan));
+    }
+
+    /**
+     * Returns a snapshot of lightweight runtime counters for this backend instance.
+     */
+    public final OpenClRuntimeStatistics statistics() {
+        return new OpenClRuntimeStatistics(
+                invocationCount.get(),
+                compileCount.get(),
+                compileCacheHitCount.get(),
+                sessionCreationCount.get(),
+                deviceBufferCreationCount.get()
+        );
+    }
+
+    /**
+     * Resets lightweight runtime counters collected by this backend instance.
+     *
+     * <p>This does not clear compiled kernels, native buffers, or shared caches. It only resets diagnostic counters so
+     * the next measurement window starts from zero.
+     */
+    public final void resetStatistics() {
+        invocationCount.set(0L);
+        compileCount.set(0L);
+        compileCacheHitCount.set(0L);
+        sessionCreationCount.set(0L);
+        deviceBufferCreationCount.set(0L);
     }
 
     public final Image2DReadOnly createReadOnlyRgbaFloatImage(int width, int height, float[] rgba) {
@@ -1347,7 +1384,9 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     private OpenClRuntimeSession createSessionChecked() {
         try {
-            return createSession();
+            OpenClRuntimeSession runtimeSession = createSession();
+            sessionCreationCount.incrementAndGet();
+            return runtimeSession;
         } catch (UnsatisfiedLinkError | IllegalStateException exception) {
             throw new UnsupportedOperationException("OpenCL runtime is unavailable: " + exception.getMessage(), exception);
         }
@@ -1358,9 +1397,17 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
     }
 
     private Object resolveNativeBuffer(OpenClPreparedBufferBinding binding) {
+        Object existing = nativeBuffers.get(binding.handle().handleId());
+        if (existing != null) {
+            return existing;
+        }
+
         return nativeBuffers.computeIfAbsent(
                 binding.handle().handleId(),
-                ignored -> createDeviceBuffer(binding.binding())
+                ignored -> {
+                    deviceBufferCreationCount.incrementAndGet();
+                    return createDeviceBuffer(binding.binding());
+                }
         );
     }
 
@@ -1418,6 +1465,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     private OpenClCompiledKernel compileKernelChecked(GpuKernelDescriptor descriptor) {
         try {
+            compileCount.incrementAndGet();
             return compileKernel(descriptor);
         } catch (RuntimeException exception) {
             throw OpenClFailureFormatter.buildFailure(descriptor, runtimeCapabilities().deviceLabel(), exception);

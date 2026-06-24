@@ -121,3 +121,17 @@ tasks.register('localMemoryTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Local*'
     }
 }
+
+tasks.register('performanceStressTest', Test) {
+    group = 'verification'
+    description = 'Runs cache warm-up, repeated-run, and production stress validation tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClPerformanceValidationTest'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendTest.repeatedCreateInvokeCloseCyclesRemainStable'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.repeatedStructAndVectorMarshallingRoundsRemainStable'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.repeatedImageAndSamplerMarshallingRoundsRemainStable'
+    }
+}

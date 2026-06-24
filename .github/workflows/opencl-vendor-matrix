@@ -50,5 +50,8 @@ jobs:
       - name: Local memory suite
         run: ./gradlew.bat :processor:localMemoryTest --console=plain
 
+      - name: Performance and stress suite
+        run: ./gradlew.bat :processor:performanceStressTest --console=plain
+
       - name: Optional integration smoke
         run: ./gradlew.bat :processor:test --tests "net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest" --console=plain

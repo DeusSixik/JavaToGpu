@@ -32,6 +32,26 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
+    void rejectsUnsupportedIntrinsicUsage() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    output[0] = GPU.sin(true);
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validate(parser.parseMethod(methodSource))
+        );
+
+        assertEquals(
+                "Unknown GPU intrinsic overload: GPU.sin[boolean]; check the supported overloads for that intrinsic or cast arguments to a supported GPU scalar/vector type",
+                exception.getMessage()
+        );
+    }
+
+    @Test
     void rejectsObjectAllocation() {
         String methodSource = """
                 @GPU

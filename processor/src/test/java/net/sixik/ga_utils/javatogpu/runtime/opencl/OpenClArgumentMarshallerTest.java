@@ -358,6 +358,61 @@ class OpenClArgumentMarshallerTest {
     }
 
     @Test
+    void repeatedStructAndVectorMarshallingRoundsRemainStable() {
+        GpuKernelDescriptor vectorDescriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("bias", "Float2", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("normal", "Float3", GpuKernelParameterAccess.VALUE)
+                )
+        );
+        GpuKernelDescriptor structDescriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("samples", "sample.Sample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        for (int iteration = 0; iteration < 50; iteration++) {
+            OpenClKernelArguments vectorArgs = OpenClArgumentMarshaller.marshall(
+                    vectorDescriptor,
+                    new Object[]{new Float2(iteration + 1.0f, iteration + 2.0f), new Float3(iteration + 3.0f, iteration + 4.0f, iteration + 5.0f)}
+            );
+
+            ByteBuffer packedVector = ((ByteBuffer) assertInstanceOf(OpenClScalarArgument.class, vectorArgs.values().get(0)).value())
+                    .duplicate()
+                    .order(ByteOrder.nativeOrder());
+            assertEquals(iteration + 1.0f, packedVector.getFloat(0));
+            assertEquals(iteration + 2.0f, packedVector.getFloat(4));
+
+            Sample[] samples = new Sample[]{
+                    new Sample(iteration + 1.0f, iteration + 2.0f),
+                    new Sample(iteration + 3.0f, iteration + 4.0f)
+            };
+
+            OpenClKernelArguments structArgs = OpenClArgumentMarshaller.marshall(structDescriptor, new Object[]{samples});
+            OpenClArrayArgument structArray = assertInstanceOf(OpenClArrayArgument.class, structArgs.values().get(0));
+            assertEquals(OpenClArgumentKind.STRUCT_ARRAY, structArray.kind());
+
+            ByteBuffer bytes = OpenClValuePacker.packStructArray(samples).duplicate().order(ByteOrder.nativeOrder());
+            bytes.putFloat(0, iteration + 10.0f);
+            bytes.putFloat(4, iteration + 11.0f);
+            bytes.putFloat(8, iteration + 12.0f);
+            bytes.putFloat(12, iteration + 13.0f);
+            OpenClValuePacker.unpackStructArray(bytes, samples);
+
+            assertEquals(iteration + 10.0f, samples[0].x);
+            assertEquals(iteration + 11.0f, samples[0].y);
+            assertEquals(iteration + 12.0f, samples[1].x);
+            assertEquals(iteration + 13.0f, samples[1].y);
+        }
+    }
+
+    @Test
     void rejectsKernelArgumentCountMismatch() {
         GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
                 "kernel",
@@ -426,6 +481,39 @@ class OpenClArgumentMarshallerTest {
         assertEquals(202L, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(1)).value());
         assertEquals(OpenClArgumentKind.SAMPLER, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(2)).kind());
         assertEquals(303L, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(2)).value());
+    }
+
+    @Test
+    void repeatedImageAndSamplerMarshallingRoundsRemainStable() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("inputImage", "Image2DReadOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("outputImage", "Image2DWriteOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("sampler", "Sampler", GpuKernelParameterAccess.VALUE)
+                )
+        );
+
+        for (int iteration = 0; iteration < 50; iteration++) {
+            long inputHandle = 101L + iteration;
+            long outputHandle = 201L + iteration;
+            long samplerHandle = 301L + iteration;
+
+            OpenClKernelArguments marshalled = OpenClArgumentMarshaller.marshall(
+                    descriptor,
+                    new Object[]{
+                            Image2DReadOnly.borrowed(inputHandle, 64, 32),
+                            Image2DWriteOnly.borrowed(outputHandle, 64, 32),
+                            Sampler.borrowed(samplerHandle)
+                    }
+            );
+
+            assertEquals(inputHandle, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(0)).value());
+            assertEquals(outputHandle, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(1)).value());
+            assertEquals(samplerHandle, assertInstanceOf(OpenClScalarArgument.class, marshalled.values().get(2)).value());
+        }
     }
 
     @Test

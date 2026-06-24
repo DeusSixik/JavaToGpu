@@ -103,6 +103,7 @@ public final class GpuIntrinsicDatabase {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown GPU intrinsic overload: " + owner + "." + javaName + argumentTypes
+                                + "; check the supported overloads for that intrinsic or cast arguments to a supported GPU scalar/vector type"
                 ));
     }
 
@@ -130,6 +131,7 @@ public final class GpuIntrinsicDatabase {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown GPU intrinsic overload: " + ownerType + "." + javaName + argumentTypes
+                                + "; check the supported overloads for that intrinsic or cast arguments to a supported GPU scalar/vector type"
                 ));
     }
 

@@ -481,7 +481,7 @@ class OpenClGpuRuntimeBackendTest {
         );
 
         assertEquals(
-                "OpenCL kernel build failed for kernel kernel on device Fake GPU [javatogpu/sample/Demo/kernel.cl]: driver build log: unknown type name 'half16'",
+                "OpenCL kernel build failed for kernel kernel on device Fake GPU [javatogpu/sample/Demo/kernel.cl]: driver build log: unknown type name 'half16'; check the generated kernel source and enable ABI debug for layout-sensitive failures",
                 exception.getMessage()
         );
     }
@@ -618,6 +618,92 @@ class OpenClGpuRuntimeBackendTest {
         assertEquals(2, deviceBufferAllocations.get());
         assertEquals(1, backend.cacheSize());
         assertEquals(1, backend.bufferCacheSize());
+    }
+
+    @Test
+    void repeatedCreateInvokeCloseCyclesRemainStable() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel(__global int* output) { output[0] = 1; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicInteger compileCalls = new AtomicInteger();
+        AtomicInteger deviceBufferAllocations = new AtomicInteger();
+        AtomicInteger trackedBufferCloseCalls = new AtomicInteger();
+
+        for (int iteration = 0; iteration < 25; iteration++) {
+            OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+                @Override
+                protected OpenClRuntimeCapabilities runtimeCapabilities() {
+                    return new OpenClRuntimeCapabilities("Fake GPU", "OpenCL 3.0 Fake GPU", true, true, true, 32_768L, 256L);
+                }
+
+                @Override
+                protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                    compileCalls.incrementAndGet();
+                    return new OpenClCompiledKernel(kernelDescriptor, "compiled:" + compileCalls.get());
+                }
+
+                @Override
+                protected Object createDeviceBuffer(OpenClBufferBinding binding) {
+                    deviceBufferAllocations.incrementAndGet();
+                    return new AutoCloseable() {
+                        private boolean closed;
+
+                        @Override
+                        public void close() {
+                            if (!closed) {
+                                closed = true;
+                                trackedBufferCloseCalls.incrementAndGet();
+                            }
+                        }
+                    };
+                }
+
+                @Override
+                protected void uploadToDeviceBuffer(Object nativeBuffer, OpenClBufferBinding binding) {
+                    // no-op
+                }
+
+                @Override
+                protected void bindBufferArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, Object nativeBuffer) {
+                    // no-op
+                }
+
+                @Override
+                protected void bindScalarArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, OpenClScalarBinding binding) {
+                    // no-op
+                }
+
+                @Override
+                protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+                    // no-op
+                }
+
+                @Override
+                protected void readBackFromDeviceBuffer(Object nativeBuffer, OpenClBufferBinding binding) {
+                    // no-op
+                }
+            };
+
+            backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new int[]{iteration}}));
+
+            assertEquals(1, backend.cacheSize());
+            assertEquals(1, backend.bufferCacheSize());
+
+            backend.close();
+
+            assertEquals(0, backend.cacheSize());
+            assertEquals(0, backend.bufferCacheSize());
+        }
+
+        assertEquals(25, compileCalls.get());
+        assertEquals(25, deviceBufferAllocations.get());
+        assertEquals(25, trackedBufferCloseCalls.get());
     }
 
     @Test

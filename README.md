@@ -122,6 +122,59 @@ try (GpuRuntimeScope ignored = GpuRuntime.useOpenClSharedCache()) {
 }
 ```
 
+## Runtime Failure Modes
+
+JavaToGpu now supports three practical runtime modes:
+
+- `strict fail`
+  Install one concrete backend and let unsupported environments fail immediately with a clear exception.
+- `fallback chain`
+  Build an ordered backend policy and let runtime pick the first compatible candidate.
+- `capability precheck + skip`
+  Probe a policy first, inspect the miss reason, and skip GPU execution without exception-driven control flow.
+
+Strict fail:
+
+```java
+try (GpuRuntimeScope ignored = GpuRuntime.useOpenClSharedCache()) {
+    Demo.kernel(input, output);
+} finally {
+    GpuRuntime.shutdownOpenClSharedCache();
+}
+```
+
+Fallback chain:
+
+```java
+GpuRuntimeBackendPolicy policy = GpuRuntimeBackendPolicy.builder()
+        .minimumApiVersion(GpuBackendTarget.OPENCL, 3, 0)
+        .preferOpenClSharedCache()
+        .prefer(() -> new MyCpuFallbackBackend())
+        .build();
+
+try (GpuRuntimeScope ignored = GpuRuntime.use(policy)) {
+    Demo.kernel(input, output);
+}
+```
+
+Capability precheck + skip:
+
+```java
+GpuRuntimeBackendPolicy policy = GpuRuntimeBackendPolicy.builder()
+        .requireFeature(GpuBackendTarget.OPENCL, GpuRuntimeFeature.IMAGES)
+        .preferOpenClSharedCache()
+        .build();
+
+GpuRuntimeSelectionResult result = GpuRuntime.trySelect(policy);
+if (!result.matched()) {
+    System.out.println("GPU path skipped: " + result.failureSummary());
+} else {
+    try (GpuRuntimeScope ignored = GpuRuntime.useOwnedBackend(result.requireSelection().backend())) {
+        Demo.kernel(input, output);
+    }
+}
+```
+
 ## Basic Kernel Example
 
 ```java

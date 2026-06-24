@@ -213,6 +213,39 @@ class GpuRuntimeTest {
     }
 
     @Test
+    void trySelectFirstMatchingReturnsFailureSummaryInsteadOfThrowing() {
+        GpuRuntimeBackend cudaBackend = new ReportingBackend(
+                GpuRuntimeBackendReport.unavailable(GpuBackendTarget.CUDA, "CUDA", "CUDA runtime is unavailable")
+        );
+        GpuRuntimeBackend openClBackend = new ReportingBackend(
+                GpuRuntimeBackendReport.available(
+                        GpuBackendTarget.OPENCL,
+                        "OpenCL",
+                        "Legacy GPU",
+                        new GpuRuntimeApiVersion(2, 0),
+                        "OpenCL 2.0 Legacy GPU",
+                        java.util.EnumSet.noneOf(GpuRuntimeFeature.class),
+                        4_096L,
+                        64L,
+                        null
+                )
+        );
+
+        GpuRuntimeSelectionResult result = GpuRuntime.trySelectFirstMatching(
+                java.util.List.of(
+                        GpuRuntimeRequirements.minimumApiVersion(GpuBackendTarget.OPENCL, 3, 0),
+                        GpuRuntimeRequirements.requireFeature(GpuBackendTarget.OPENCL, GpuRuntimeFeature.IMAGES)
+                ),
+                cudaBackend,
+                openClBackend
+        );
+
+        assertTrue(!result.matched());
+        assertTrue(result.failureSummary().contains("CUDA: CUDA runtime is unavailable"));
+        assertTrue(result.failureSummary().contains("OpenCL: requires API version at least 3.0 but found 2.0; missing feature IMAGES"));
+    }
+
+    @Test
     void useFirstMatchingExplainsFactoryCreationFailures() {
         UnsupportedOperationException exception = assertThrows(
                 UnsupportedOperationException.class,
@@ -339,6 +372,38 @@ class GpuRuntimeTest {
         assertSame(previousBackend, GpuRuntime.backend());
         assertEquals(1, unavailableCuda.closeCalls);
         assertEquals(1, openCl.closeCalls);
+    }
+
+    @Test
+    void backendPolicyTrySelectSupportsPrecheckAndSkipFlow() {
+        GpuRuntimeBackend cudaBackend = new ReportingBackend(
+                GpuRuntimeBackendReport.unavailable(GpuBackendTarget.CUDA, "CUDA", "CUDA runtime is unavailable")
+        );
+        GpuRuntimeBackend openClBackend = new ReportingBackend(
+                GpuRuntimeBackendReport.available(
+                        GpuBackendTarget.OPENCL,
+                        "OpenCL",
+                        "Policy GPU",
+                        new GpuRuntimeApiVersion(3, 0),
+                        "OpenCL 3.0 Policy GPU",
+                        java.util.EnumSet.of(GpuRuntimeFeature.IMAGES),
+                        16_384L,
+                        128L,
+                        null
+                )
+        );
+
+        GpuRuntimeSelectionResult result = GpuRuntimeBackendPolicy.builder()
+                .minimumApiVersion(GpuBackendTarget.OPENCL, 3, 0)
+                .requireFeature(GpuBackendTarget.OPENCL, GpuRuntimeFeature.IMAGES)
+                .preferBackend(cudaBackend)
+                .preferBackend(openClBackend)
+                .build()
+                .trySelect();
+
+        assertTrue(result.matched());
+        assertSame(openClBackend, result.requireSelection().backend());
+        assertEquals(GpuBackendTarget.OPENCL, result.requireSelection().report().backendTarget());
     }
 
     @Test

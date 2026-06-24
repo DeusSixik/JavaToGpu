@@ -134,18 +134,27 @@ public final class GpuRuntime {
             List<GpuRuntimeRequirement> requirements,
             GpuRuntimeBackend... candidates
     ) {
+        return trySelectFirstMatching(requirements, candidates).requireSelection();
+    }
+
+    /**
+     * Attempts to select the first backend whose capability report satisfies the given requirements without throwing
+     * when no match is found.
+     */
+    public static GpuRuntimeSelectionResult trySelectFirstMatching(
+            List<GpuRuntimeRequirement> requirements,
+            GpuRuntimeBackend... candidates
+    ) {
         List<String> failures = new ArrayList<>();
         for (GpuRuntimeBackend candidate : candidates) {
             GpuRuntimeBackendReport report = describeBackend(candidate);
             List<String> reasons = GpuRuntimeRequirements.failureReasons(report, requirements);
             if (reasons.isEmpty()) {
-                return new GpuRuntimeBackendSelection(candidate, report);
+                return new GpuRuntimeSelectionResult(new GpuRuntimeBackendSelection(candidate, report), failures);
             }
             failures.add(report.backendName() + ": " + String.join("; ", reasons));
         }
-        throw new UnsupportedOperationException(
-                "No GPU runtime backend satisfies the requested requirements: " + String.join(" | ", failures)
-        );
+        return new GpuRuntimeSelectionResult(null, failures);
     }
 
     /**
@@ -156,10 +165,24 @@ public final class GpuRuntime {
     }
 
     /**
+     * Attempts to select the first available backend without additional requirements.
+     */
+    public static GpuRuntimeSelectionResult trySelectFirstAvailable(GpuRuntimeBackend... candidates) {
+        return trySelectFirstMatching(List.of(), candidates);
+    }
+
+    /**
      * Selects a backend using an immutable fallback policy.
      */
     public static GpuRuntimeBackendSelection select(GpuRuntimeBackendPolicy policy) {
         return Objects.requireNonNull(policy, "policy").select();
+    }
+
+    /**
+     * Attempts to select a backend using an immutable fallback policy without throwing on a miss.
+     */
+    public static GpuRuntimeSelectionResult trySelect(GpuRuntimeBackendPolicy policy) {
+        return Objects.requireNonNull(policy, "policy").trySelect();
     }
 
     /**

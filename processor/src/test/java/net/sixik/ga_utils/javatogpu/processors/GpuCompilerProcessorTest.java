@@ -4436,7 +4436,7 @@ class GpuCompilerProcessorTest {
 
         assertTrue(
                 diagnostics.getDiagnostics().stream().anyMatch(diagnostic ->
-                        String.valueOf(diagnostic.getMessage(null)).contains("Unsupported GPU parameter type: boolean")
+                        String.valueOf(diagnostic.getMessage(null)).contains("Unsupported GPU parameter type: boolean; use int or byte masks for kernel parameters")
                 )
         );
     }
@@ -4484,7 +4484,7 @@ class GpuCompilerProcessorTest {
         assertTrue(
                 diagnostics.getDiagnostics().stream().anyMatch(diagnostic ->
                         String.valueOf(diagnostic.getMessage(null)).contains(
-                                "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: float[]"
+                                "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: float[]; for example: @GPUGlobal float[] input"
                         )
                 )
         );

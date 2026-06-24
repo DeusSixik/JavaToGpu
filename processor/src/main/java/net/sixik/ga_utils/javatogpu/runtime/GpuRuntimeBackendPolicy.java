@@ -67,6 +67,16 @@ public final class GpuRuntimeBackendPolicy {
      * {@link AutoCloseable}, the caller is responsible for closing it.
      */
     public GpuRuntimeBackendSelection select() {
+        return trySelect().requireSelection();
+    }
+
+    /**
+     * Creates backend candidates and returns a non-throwing selection result.
+     *
+     * <p>This is the preferred API for "capability precheck + skip" flows where the application wants to inspect the
+     * miss reason and decide what to do next without relying on exception-based control flow.
+     */
+    public GpuRuntimeSelectionResult trySelect() {
         List<String> failures = new ArrayList<>();
         for (GpuRuntimeBackendFactory factory : candidateFactories) {
             GpuRuntimeBackend candidate;
@@ -80,16 +90,14 @@ public final class GpuRuntimeBackendPolicy {
             GpuRuntimeBackendReport report = GpuRuntime.describeBackend(candidate);
             List<String> reasons = GpuRuntimeRequirements.failureReasons(report, requirements);
             if (reasons.isEmpty()) {
-                return new GpuRuntimeBackendSelection(candidate, report);
+                return new GpuRuntimeSelectionResult(new GpuRuntimeBackendSelection(candidate, report), failures);
             }
 
             failures.add(report.backendName() + ": " + String.join("; ", reasons));
             closeCandidateQuietly(candidate);
         }
 
-        throw new UnsupportedOperationException(
-                "No GPU runtime backend satisfies the requested requirements: " + String.join(" | ", failures)
-        );
+        return new GpuRuntimeSelectionResult(null, failures);
     }
 
     /**

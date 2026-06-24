@@ -1,0 +1,54 @@
+name: OpenCL Vendor Matrix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  vendor-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - vendor: intel
+            runs_on: [self-hosted, windows, opencl, intel]
+          - vendor: nvidia
+            runs_on: [self-hosted, windows, opencl, nvidia]
+          - vendor: amd
+            runs_on: [self-hosted, windows, opencl, amd]
+
+    runs-on: ${{ matrix.runs_on }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Compile-only suite
+        run: ./gradlew.bat :processor:compileOnlyTest --console=plain
+
+      - name: Runtime OpenCL suite
+        run: ./gradlew.bat :processor:runtimeOpenClTest --console=plain
+
+      - name: Image suite
+        run: ./gradlew.bat :processor:imageOpenClTest --console=plain
+
+      - name: Struct ABI suite
+        run: ./gradlew.bat :processor:structAbiTest --console=plain
+
+      - name: Atomics suite
+        run: ./gradlew.bat :processor:atomicsCompileTest --console=plain
+
+      - name: Local memory suite
+        run: ./gradlew.bat :processor:localMemoryTest --console=plain
+
+      - name: Optional integration smoke
+        run: ./gradlew.bat :processor:test --tests "net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest" --console=plain

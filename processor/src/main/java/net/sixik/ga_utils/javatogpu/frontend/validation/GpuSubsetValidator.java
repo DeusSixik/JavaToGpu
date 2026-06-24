@@ -283,7 +283,7 @@ public final class GpuSubsetValidator {
                     || isPackedArrayType(type, structRegistry)
                     : GpuTypeSupport.isSupportedHelperParameterType(type) || isStructType(type, structRegistry);
             if (!supported) {
-                issues.add(new GpuValidationIssue(1, 1, "Unsupported GPU parameter type: " + type));
+                issues.add(new GpuValidationIssue(1, 1, unsupportedParameterTypeMessage(type, kernelEntry)));
                 return;
             }
             if (parameter.addressSpace() == GpuAddressSpace.GLOBAL && !GpuTypeSupport.isGlobalParameterCompatible(type)) {
@@ -320,7 +320,7 @@ public final class GpuSubsetValidator {
                 issues.add(new GpuValidationIssue(
                         1,
                         1,
-                        "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: " + type
+                        arrayAddressSpaceRequiredMessage(type)
                 ));
             }
 
@@ -589,7 +589,7 @@ public final class GpuSubsetValidator {
             return;
         }
 
-        issues.add(issue(statement, "Unsupported statement in @GPU method: " + statement.getClass().getSimpleName()));
+        issues.add(issue(statement, unsupportedStatementMessage(statement)));
     }
 
     private void validateExpressionStatement(
@@ -904,7 +904,7 @@ public final class GpuSubsetValidator {
             return;
         }
 
-        issues.add(issue(expression, "Unsupported expression in @GPU method: " + expression));
+        issues.add(issue(expression, unsupportedExpressionMessage(expression)));
     }
 
     private void validateObjectCreation(
@@ -1857,6 +1857,35 @@ public final class GpuSubsetValidator {
             return left.ownerQualifiedName().equals(right.ownerQualifiedName());
         }
         return left.ownerSimpleName().equals(right.ownerSimpleName());
+    }
+
+    private String unsupportedParameterTypeMessage(String type, boolean kernelEntry) {
+        if ("boolean".equals(type)) {
+            return "Unsupported GPU parameter type: boolean; use int or byte masks for kernel parameters because boolean kernel parameters are not part of the current OpenCL contract";
+        }
+        return (kernelEntry
+                ? "Unsupported GPU parameter type: " + type + "; supported @GPU parameter shapes are scalar values, vectors, images/samplers, @GPUStruct values, and array parameters annotated with an explicit GPU address space"
+                : "Unsupported GPU parameter type: " + type + "; supported helper parameter shapes are scalar values, vectors, pointers, images/samplers, and @GPUStruct values");
+    }
+
+    private String arrayAddressSpaceRequiredMessage(String type) {
+        return "Array parameters must be annotated with @GPUGlobal, @GPUConstant, or @GPULocal in the current pipeline: "
+                + type
+                + "; for example: @GPUGlobal "
+                + type
+                + " input";
+    }
+
+    private String unsupportedStatementMessage(Statement statement) {
+        return "Unsupported statement in @GPU method: "
+                + statement.getClass().getSimpleName()
+                + "; use the supported Java GPU subset from docs/supported-subset-contract.md";
+    }
+
+    private String unsupportedExpressionMessage(Expression expression) {
+        return "Unsupported expression in @GPU method: "
+                + expression
+                + "; rewrite it into the supported Java GPU subset from docs/supported-subset-contract.md";
     }
 
     private record ValidationContext(

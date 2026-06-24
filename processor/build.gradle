@@ -29,3 +29,95 @@ dependencies {
 test {
     useJUnitPlatform()
 }
+
+tasks.register('compileOnlyTest', Test) {
+    group = 'verification'
+    description = 'Runs compile-only frontend and processor validation tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.*.*'
+    }
+}
+
+tasks.register('runtimeOpenClTest', Test) {
+    group = 'verification'
+    description = 'Runs runtime-focused OpenCL tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.*'
+    }
+}
+
+tasks.register('imageOpenClTest', Test) {
+    group = 'verification'
+    description = 'Runs image and sampler related OpenCL tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendTest.*Image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendTest.*image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.*Image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.*image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessorTest.*image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessorTest.*Image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*image*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Image*'
+    }
+}
+
+tasks.register('structAbiTest', Test) {
+    group = 'verification'
+    description = 'Runs struct/vector ABI and marshalling tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClAbiSupportTest'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendMarshallingTest'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClExecutionPlannerTest'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.*struct*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.*Struct*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.*vector*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.*Vector*'
+    }
+}
+
+tasks.register('atomicsCompileTest', Test) {
+    group = 'verification'
+    description = 'Runs atomics related compile/emission tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessorTest.*atomic*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessorTest.*Atomic*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*atomic*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Atomic*'
+    }
+}
+
+tasks.register('localMemoryTest', Test) {
+    group = 'verification'
+    description = 'Runs local memory and local address-space tests.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendTest.*local*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendTest.*Local*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessorTest.*local*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessorTest.*Local*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*local*'
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Local*'
+    }
+}

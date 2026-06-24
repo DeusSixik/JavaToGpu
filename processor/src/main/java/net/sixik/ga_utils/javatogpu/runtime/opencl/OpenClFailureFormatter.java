@@ -16,7 +16,8 @@ final class OpenClFailureFormatter {
                         + " ["
                         + descriptor.kernelResource()
                         + "]: "
-                        + rootMessage(cause),
+                        + rootMessage(cause)
+                        + "; check the generated kernel source and enable ABI debug for layout-sensitive failures",
                 cause
         );
     }

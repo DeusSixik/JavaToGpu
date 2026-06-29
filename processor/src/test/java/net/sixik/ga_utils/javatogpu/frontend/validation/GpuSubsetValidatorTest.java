@@ -752,6 +752,66 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
+    void rejectsUnsupportedOpenClQualifierOnPointerParameter() {
+        String methodSource = """
+                @GPU
+                void kernel(@OpenCLQualifiers({"coherent"}) @GPUGlobal float[] output) {
+                    output[0] = 1.0f;
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validate(parser.parseMethod(methodSource))
+        );
+
+        assertEquals(
+                "Unsupported OpenCL parameter qualifier: coherent",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void rejectsDuplicateOpenClQualifierOnPointerParameter() {
+        String methodSource = """
+                @GPU
+                void kernel(@OpenCLQualifiers({"restrict", "restrict"}) @GPUGlobal float[] output) {
+                    output[0] = 1.0f;
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validate(parser.parseMethod(methodSource))
+        );
+
+        assertEquals(
+                "Duplicate OpenCL parameter qualifier: restrict",
+                exception.getMessage()
+        );
+    }
+
+    @Test
+    void rejectsOpenClQualifierOnNonPointerParameter() {
+        String methodSource = """
+                @GPU
+                void kernel(@OpenCLQualifiers({"const"}) float scale, @GPUGlobal float[] output) {
+                    output[0] = scale;
+                }
+                """;
+
+        GpuValidationException exception = assertThrows(
+                GpuValidationException.class,
+                () -> validator.validate(parser.parseMethod(methodSource))
+        );
+
+        assertEquals(
+                "OpenCLQualifiers are only supported on pointer-like GPU parameters in the current pipeline: float",
+                exception.getMessage()
+        );
+    }
+
+    @Test
     void acceptsGlobalArrayPassedToAddressSpacePointerHelper() {
         String kernelSource = """
                 @GPU

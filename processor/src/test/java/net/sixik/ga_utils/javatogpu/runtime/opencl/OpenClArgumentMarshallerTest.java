@@ -362,6 +362,58 @@ class OpenClArgumentMarshallerTest {
     }
 
     @Test
+    void marshalsAndUnmarshalsPackedOuterStructArrayWithAlignedNestedFields() {
+        PackedOuterAlignedNestedSample[] samples = new PackedOuterAlignedNestedSample[]{
+                new PackedOuterAlignedNestedSample(11, new AlignedNestedSample((short) 3, 4.5f), 22),
+                null
+        };
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("samples", "sample.PackedOuterAlignedNestedSample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClKernelArguments marshalled = OpenClArgumentMarshaller.marshall(descriptor, new Object[]{samples});
+
+        OpenClArrayArgument argument = assertInstanceOf(OpenClArrayArgument.class, marshalled.values().get(0));
+        assertEquals(OpenClArgumentKind.STRUCT_ARRAY, argument.kind());
+        assertEquals(2, argument.length());
+
+        ByteBuffer bytes = OpenClValuePacker.packStructArray(samples).duplicate().order(ByteOrder.nativeOrder());
+        assertEquals(32, bytes.remaining());
+        assertEquals(11, bytes.getInt(0));
+        assertEquals((short) 3, bytes.getShort(4));
+        assertEquals(4.5f, bytes.getFloat(8));
+        assertEquals(22, bytes.getInt(12));
+        assertEquals(0, bytes.getInt(16));
+        assertEquals((short) 0, bytes.getShort(20));
+        assertEquals(0.0f, bytes.getFloat(24));
+        assertEquals(0, bytes.getInt(28));
+
+        bytes.putInt(0, 31);
+        bytes.putShort(4, (short) 7);
+        bytes.putFloat(8, 8.5f);
+        bytes.putInt(12, 41);
+        bytes.putInt(16, 51);
+        bytes.putShort(20, (short) 9);
+        bytes.putFloat(24, 10.5f);
+        bytes.putInt(28, 61);
+        OpenClValuePacker.unpackStructArray(bytes, samples);
+
+        assertEquals(31, samples[0].header);
+        assertEquals(7, samples[0].nested.code);
+        assertEquals(8.5f, samples[0].nested.value);
+        assertEquals(41, samples[0].tail);
+        assertEquals(51, samples[1].header);
+        assertEquals(9, samples[1].nested.code);
+        assertEquals(10.5f, samples[1].nested.value);
+        assertEquals(61, samples[1].tail);
+    }
+
+    @Test
     void repeatedStructAndVectorMarshallingRoundsRemainStable() {
         GpuKernelDescriptor vectorDescriptor = new GpuKernelDescriptor(
                 "kernel",
@@ -859,6 +911,38 @@ class OpenClArgumentMarshallerTest {
         AlignedVectorSample(Float3 normal, double weight) {
             this.normal = normal;
             this.weight = weight;
+        }
+    }
+
+    @GPUStruct
+    static final class AlignedNestedSample {
+        short code;
+        @OpenCLAttributes({"aligned(4)"})
+        float value;
+
+        AlignedNestedSample() {
+        }
+
+        AlignedNestedSample(short code, float value) {
+            this.code = code;
+            this.value = value;
+        }
+    }
+
+    @GPUStruct
+    @OpenCLAttributes({"packed"})
+    static final class PackedOuterAlignedNestedSample {
+        int header;
+        AlignedNestedSample nested;
+        int tail;
+
+        PackedOuterAlignedNestedSample() {
+        }
+
+        PackedOuterAlignedNestedSample(int header, AlignedNestedSample nested, int tail) {
+            this.header = header;
+            this.nested = nested;
+            this.tail = tail;
         }
     }
 }

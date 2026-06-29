@@ -158,6 +158,28 @@ class OpenClAbiSupportTest {
         assertEquals(4, descriptor.alignment());
     }
 
+    @Test
+    void describesPackedOuterStructWithAlignedNestedStructLayout() {
+        OpenClAbiDescriptor descriptor = OpenClAbiSupport.describeStructType(PackedOuterAlignedNestedSample.class);
+        String debug = OpenClAbiSupport.debugDescriptor(descriptor);
+
+        assertEquals(OpenClAbiKind.STRUCT, descriptor.kind());
+        assertEquals(16, descriptor.size());
+        assertEquals(1, descriptor.alignment());
+        assertEquals(3, descriptor.fields().size());
+        assertEquals("header", descriptor.fields().get(0).name());
+        assertEquals(0, descriptor.fields().get(0).offset());
+        assertEquals("nested", descriptor.fields().get(1).name());
+        assertEquals(4, descriptor.fields().get(1).offset());
+        assertEquals(8, descriptor.fields().get(1).size());
+        assertEquals("tail", descriptor.fields().get(2).name());
+        assertEquals(12, descriptor.fields().get(2).offset());
+        assertTrue(debug.contains("PackedOuterAlignedNestedSample [STRUCT] size=16, align=1"));
+        assertTrue(debug.contains("nested @4 size=8, align=1"));
+        assertTrue(debug.contains("AlignedNestedSample [STRUCT] size=8, align=4"));
+        assertTrue(debug.contains("value @4 size=4, align=4"));
+    }
+
     @GPUStruct
     static final class InnerSample {
         int x;
@@ -204,6 +226,27 @@ class OpenClAbiSupportTest {
         String label;
 
         UnsupportedFieldSample() {
+        }
+    }
+
+    @GPUStruct
+    static final class AlignedNestedSample {
+        short code;
+        @OpenCLAttributes({"aligned(4)"})
+        float value;
+
+        AlignedNestedSample() {
+        }
+    }
+
+    @GPUStruct
+    @OpenCLAttributes({"packed"})
+    static final class PackedOuterAlignedNestedSample {
+        int header;
+        AlignedNestedSample nested;
+        int tail;
+
+        PackedOuterAlignedNestedSample() {
         }
     }
 

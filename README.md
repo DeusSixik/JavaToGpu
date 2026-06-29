@@ -7,6 +7,7 @@ You write a restricted Java method, mark it with `@GPU`, and JavaToGpu validates
 ## Documentation
 
 - Supported subset: [docs/supported-subset-contract.md](docs/supported-subset-contract.md)
+- Quick support matrix: [docs/support-matrix.md](docs/support-matrix.md)
 - OpenCL constant data model: [docs/opencl-constant-data-model.md](docs/opencl-constant-data-model.md)
 - Packed blob/view model: [docs/packed-blob-view-model.md](docs/packed-blob-view-model.md)
 - Runtime configuration: [docs/runtime-configuration.md](docs/runtime-configuration.md)
@@ -69,6 +70,7 @@ Implemented and working:
 - host-side image upload / readback helpers for RGBA float/int/uint and RGBA8
 - read/write coverage for float, int and uint image builtins across the supported image object families
 - OpenCL attributes via `@OpenCLAttributes`
+- OpenCL parameter qualifiers via `@OpenCLQualifiers` for low-level pointer-like cases
 - OpenCL address spaces: `@GPUGlobal`, `@GPUConstant`, `@GPULocal`
 - structured ASM frontend for canonical GPU-friendly bytecode
 
@@ -77,6 +79,7 @@ Still intentionally limited:
 - non-`void` `@GPU` entry methods are not supported
 - arbitrary Java object allocation is not supported
 - arbitrary Java method calls are not supported
+- standalone host-side `image2d_msaa_t` create/upload/readback is intentionally not part of the normal runtime API
 - CUDA backend is not implemented yet
 - ASM frontend currently expects a strict GPU-friendly JVM subset rather than arbitrary bytecode
 

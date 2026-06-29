@@ -8,6 +8,7 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
 import net.sixik.ga_utils.javatogpu.frontend.model.GpuAddressSpace;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuParameter;
@@ -21,11 +22,11 @@ public final class GpuMethodParser {
     }
 
     public ParsedGpuMethod parseMethod(String methodSource) {
-        return parseMethod(methodSource, "", "", List.of());
+        return parseMethod(methodSource, "", "", List.of(), List.of());
     }
 
     public ParsedGpuMethod parseMethod(String methodSource, String ownerSimpleName, String ownerQualifiedName) {
-        return parseMethod(methodSource, ownerSimpleName, ownerQualifiedName, List.of());
+        return parseMethod(methodSource, ownerSimpleName, ownerQualifiedName, List.of(), List.of());
     }
 
     public ParsedGpuMethod parseMethod(
@@ -33,6 +34,16 @@ public final class GpuMethodParser {
             String ownerSimpleName,
             String ownerQualifiedName,
             List<ParsedGpuConstant> constants
+    ) {
+        return parseMethod(methodSource, ownerSimpleName, ownerQualifiedName, constants, List.of());
+    }
+
+    public ParsedGpuMethod parseMethod(
+            String methodSource,
+            String ownerSimpleName,
+            String ownerQualifiedName,
+            List<ParsedGpuConstant> constants,
+            List<ParsedGpuConstantData> constantData
     ) {
         MethodDeclaration declaration = StaticJavaParser.parseMethodDeclaration(methodSource);
 
@@ -47,6 +58,7 @@ public final class GpuMethodParser {
                 declaration.getTypeAsString(),
                 parameters,
                 List.copyOf(constants),
+                List.copyOf(constantData),
                 declaration,
                 parseInlineFlag(declaration),
                 GpuStructParser.parseOpenClAttributes(declaration.getAnnotations()),

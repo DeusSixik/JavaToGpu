@@ -7,6 +7,8 @@ You write a restricted Java method, mark it with `@GPU`, and JavaToGpu validates
 ## Documentation
 
 - Supported subset: [docs/supported-subset-contract.md](docs/supported-subset-contract.md)
+- OpenCL constant data model: [docs/opencl-constant-data-model.md](docs/opencl-constant-data-model.md)
+- Packed blob/view model: [docs/packed-blob-view-model.md](docs/packed-blob-view-model.md)
 - Runtime configuration: [docs/runtime-configuration.md](docs/runtime-configuration.md)
 - Device requirements: [docs/device-requirements.md](docs/device-requirements.md)
 - OpenCL validation matrix: [docs/opencl-validation-matrix.md](docs/opencl-validation-matrix.md)

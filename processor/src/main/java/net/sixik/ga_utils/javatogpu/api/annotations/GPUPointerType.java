@@ -23,6 +23,15 @@ public @interface GPUPointerType {
     String valueType();
 
     /**
+     * Declared OpenCL address space for the pointer wrapper.
+     *
+     * <p>The default {@code PRIVATE} matches the existing scalar-by-reference helper wrappers such as
+     * {@code FloatPtr}. Address-space-aware wrappers such as a future {@code GlobalFloatPtr} can declare
+     * {@code GLOBAL}, {@code CONSTANT}, or {@code LOCAL} here.
+     */
+    GPUPointerAddressSpace addressSpace() default GPUPointerAddressSpace.PRIVATE;
+
+    /**
      * Backends that recognize this pointer wrapper.
      */
     GpuBackendTarget[] backends() default {GpuBackendTarget.OPENCL};

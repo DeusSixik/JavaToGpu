@@ -79,6 +79,10 @@ public final class GPU {
     public static final int CL_UNORM_INT8 = CL10.CL_UNORM_INT8;
 
     private static final double LOG_2 = Math.log(2.0);
+    private static final double UINT_MAX_AS_DOUBLE = 4294967295.0;
+    private static final double ULONG_SIGN_THRESHOLD_AS_DOUBLE = 9223372036854775808.0;
+    private static final double ULONG_MAX_AS_DOUBLE = 18446744073709551615.0;
+    private static final double ULONG_WRAP_AS_DOUBLE = 18446744073709551616.0;
 
     private GPU() {
     }
@@ -96,6 +100,111 @@ public final class GPU {
     @GPUIntrinsic(name = "get_global_offset")
     public static int get_global_offset(int dimension) {
         return 0;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalBytePtr global(byte[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalCharPtr global(char[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalShortPtr global(short[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalIntPtr global(int[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalLongPtr global(long[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalFloatPtr global(float[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static GlobalDoublePtr global(double[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantBytePtr constant(byte[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantCharPtr constant(char[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantShortPtr constant(short[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantIntPtr constant(int[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantLongPtr constant(long[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantFloatPtr constant(float[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static ConstantDoublePtr constant(double[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalBytePtr local(byte[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalCharPtr local(char[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalShortPtr local(short[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalIntPtr local(int[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalLongPtr local(long[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalFloatPtr local(float[] values) {
+        return null;
+    }
+
+    @GPUIntrinsic(code = "({0})")
+    public static LocalDoublePtr local(double[] values) {
+        return null;
     }
 
     @GPUIntrinsic(name = "get_image_width")
@@ -1252,6 +1361,166 @@ public final class GPU {
         return left * right + addend;
     }
 
+    @GPUIntrinsic(name = "add_sat")
+    public static int add_sat(int left, int right) {
+        return saturatingAddInt(left, right);
+    }
+
+    @GPUIntrinsic(name = "add_sat")
+    public static long add_sat(long left, long right) {
+        return saturatingAddLong(left, right);
+    }
+
+    @GPUIntrinsic(code = "add_sat({0}, {1})")
+    public static UByte add_sat(UByte left, UByte right) {
+        return new UByte(saturatingAddUnsignedByte(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "add_sat({0}, {1})")
+    public static UShort add_sat(UShort left, UShort right) {
+        return new UShort(saturatingAddUnsignedShort(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "add_sat({0}, {1})")
+    public static UInt add_sat(UInt left, UInt right) {
+        return new UInt(saturatingAddUnsignedInt(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "add_sat({0}, {1})")
+    public static ULong add_sat(ULong left, ULong right) {
+        return new ULong(saturatingAddUnsignedLong(left.value, right.value));
+    }
+
+    @GPUIntrinsic(name = "sub_sat")
+    public static int sub_sat(int left, int right) {
+        return saturatingSubInt(left, right);
+    }
+
+    @GPUIntrinsic(name = "sub_sat")
+    public static long sub_sat(long left, long right) {
+        return saturatingSubLong(left, right);
+    }
+
+    @GPUIntrinsic(code = "sub_sat({0}, {1})")
+    public static UByte sub_sat(UByte left, UByte right) {
+        return new UByte(saturatingSubUnsignedByte(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "sub_sat({0}, {1})")
+    public static UShort sub_sat(UShort left, UShort right) {
+        return new UShort(saturatingSubUnsignedShort(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "sub_sat({0}, {1})")
+    public static UInt sub_sat(UInt left, UInt right) {
+        return new UInt(saturatingSubUnsignedInt(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "sub_sat({0}, {1})")
+    public static ULong sub_sat(ULong left, ULong right) {
+        return new ULong(saturatingSubUnsignedLong(left.value, right.value));
+    }
+
+    @GPUIntrinsic(name = "mul_sat")
+    public static int mul_sat(int left, int right) {
+        return saturatingMulInt(left, right);
+    }
+
+    @GPUIntrinsic(name = "mul_sat")
+    public static long mul_sat(long left, long right) {
+        return saturatingMulLong(left, right);
+    }
+
+    @GPUIntrinsic(code = "mul_sat({0}, {1})")
+    public static UByte mul_sat(UByte left, UByte right) {
+        return new UByte(saturatingMulUnsignedByte(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "mul_sat({0}, {1})")
+    public static UShort mul_sat(UShort left, UShort right) {
+        return new UShort(saturatingMulUnsignedShort(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "mul_sat({0}, {1})")
+    public static UInt mul_sat(UInt left, UInt right) {
+        return new UInt(saturatingMulUnsignedInt(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "mul_sat({0}, {1})")
+    public static ULong mul_sat(ULong left, ULong right) {
+        return new ULong(saturatingMulUnsignedLong(left.value, right.value));
+    }
+
+    @GPUIntrinsic(name = "mad_sat")
+    public static int mad_sat(int left, int right, int addend) {
+        return saturatingMadInt(left, right, addend);
+    }
+
+    @GPUIntrinsic(name = "mad_sat")
+    public static long mad_sat(long left, long right, long addend) {
+        return saturatingMadLong(left, right, addend);
+    }
+
+    @GPUIntrinsic(code = "mad_sat({0}, {1}, {2})")
+    public static UByte mad_sat(UByte left, UByte right, UByte addend) {
+        return new UByte(saturatingMadUnsignedByte(left.value, right.value, addend.value));
+    }
+
+    @GPUIntrinsic(code = "mad_sat({0}, {1}, {2})")
+    public static UShort mad_sat(UShort left, UShort right, UShort addend) {
+        return new UShort(saturatingMadUnsignedShort(left.value, right.value, addend.value));
+    }
+
+    @GPUIntrinsic(code = "mad_sat({0}, {1}, {2})")
+    public static UInt mad_sat(UInt left, UInt right, UInt addend) {
+        return new UInt(saturatingMadUnsignedInt(left.value, right.value, addend.value));
+    }
+
+    @GPUIntrinsic(code = "mad_sat({0}, {1}, {2})")
+    public static ULong mad_sat(ULong left, ULong right, ULong addend) {
+        return new ULong(saturatingMadUnsignedLong(left.value, right.value, addend.value));
+    }
+
+    @GPUIntrinsic(name = "hadd")
+    public static int hadd(int left, int right) {
+        return (left >> 1) + (right >> 1) + ((left & 1) & (right & 1));
+    }
+
+    @GPUIntrinsic(name = "hadd")
+    public static long hadd(long left, long right) {
+        return (left >> 1) + (right >> 1) + ((left & 1L) & (right & 1L));
+    }
+
+    @GPUIntrinsic(name = "rhadd")
+    public static int rhadd(int left, int right) {
+        return (left >> 1) + (right >> 1) + ((left & 1) | (right & 1));
+    }
+
+    @GPUIntrinsic(name = "rhadd")
+    public static long rhadd(long left, long right) {
+        return (left >> 1) + (right >> 1) + ((left & 1L) | (right & 1L));
+    }
+
+    @GPUIntrinsic(name = "mul_hi")
+    public static int mul_hi(int left, int right) {
+        return (int) ((((long) left) * ((long) right)) >> 32);
+    }
+
+    @GPUIntrinsic(name = "mul_hi")
+    public static long mul_hi(long left, long right) {
+        return signedMulHiLong(left, right);
+    }
+
+    @GPUIntrinsic(name = "mad_hi")
+    public static int mad_hi(int left, int right, int addend) {
+        return mul_hi(left, right) + addend;
+    }
+
+    @GPUIntrinsic(name = "mad_hi")
+    public static long mad_hi(long left, long right, long addend) {
+        return mul_hi(left, right) + addend;
+    }
+
     @GPUIntrinsic(name = "clamp")
     public static float clamp(float value, float minValue, float maxValue) {
         return Math.max(minValue, Math.min(value, maxValue));
@@ -1783,6 +2052,26 @@ public final class GPU {
         return Math.abs(left - right);
     }
 
+    @GPUIntrinsic(code = "abs_diff({0}, {1})")
+    public static UByte abs_diff(UByte left, UByte right) {
+        return new UByte(absDiffUnsignedByte(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "abs_diff({0}, {1})")
+    public static UShort abs_diff(UShort left, UShort right) {
+        return new UShort(absDiffUnsignedShort(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "abs_diff({0}, {1})")
+    public static UInt abs_diff(UInt left, UInt right) {
+        return new UInt(absDiffUnsignedInt(left.value, right.value));
+    }
+
+    @GPUIntrinsic(code = "abs_diff({0}, {1})")
+    public static ULong abs_diff(ULong left, ULong right) {
+        return new ULong(absDiffUnsignedLong(left.value, right.value));
+    }
+
     @GPUIntrinsic(name = "upsample")
     public static int upsample(short high, short low) {
         return ((high & 0xFFFF) << 16) | (low & 0xFFFF);
@@ -1823,6 +2112,16 @@ public final class GPU {
         return (left & ~mask) | (right & mask);
     }
 
+    @GPUIntrinsic(code = "nan(((uint) ({0})))")
+    public static float nan(int nancode) {
+        return Float.intBitsToFloat(0x7fc00000 | (nancode & 0x003fffff));
+    }
+
+    @GPUIntrinsic(code = "nan(((ulong) ({0})))")
+    public static double nan(long nancode) {
+        return Double.longBitsToDouble(0x7ff8000000000000L | (nancode & 0x0007ffffffffffffL));
+    }
+
     @GPUIntrinsic(name = "convert_int")
     public static int convert_int(float value) {
         return (int) value;
@@ -1836,6 +2135,26 @@ public final class GPU {
     @GPUIntrinsic(name = "convert_int")
     public static int convert_int(long value) {
         return (int) value;
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static int convert_int(UByte value) {
+        return Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static int convert_int(UShort value) {
+        return Short.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static int convert_int(UInt value) {
+        return value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static int convert_int(ULong value) {
+        return (int) value.value;
     }
 
     @GPUIntrinsic(name = "convert_long")
@@ -1853,6 +2172,26 @@ public final class GPU {
         return value;
     }
 
+    @GPUIntrinsic(name = "convert_long")
+    public static long convert_long(UByte value) {
+        return Byte.toUnsignedLong(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static long convert_long(UShort value) {
+        return Short.toUnsignedLong(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static long convert_long(UInt value) {
+        return Integer.toUnsignedLong(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static long convert_long(ULong value) {
+        return value.value;
+    }
+
     @GPUIntrinsic(name = "convert_float")
     public static float convert_float(int value) {
         return value;
@@ -1866,6 +2205,26 @@ public final class GPU {
     @GPUIntrinsic(name = "convert_float")
     public static float convert_float(double value) {
         return (float) value;
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static float convert_float(UByte value) {
+        return Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static float convert_float(UShort value) {
+        return Short.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static float convert_float(UInt value) {
+        return Integer.toUnsignedLong(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static float convert_float(ULong value) {
+        return (float) value.value;
     }
 
     @GPUIntrinsic(name = "convert_double")
@@ -1883,9 +2242,279 @@ public final class GPU {
         return value;
     }
 
+    @GPUIntrinsic(name = "convert_double")
+    public static double convert_double(UByte value) {
+        return Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static double convert_double(UShort value) {
+        return Short.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static double convert_double(UInt value) {
+        return Integer.toUnsignedLong(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static double convert_double(ULong value) {
+        return value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(float value) {
+        return (byte) value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(double value) {
+        return (byte) value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(int value) {
+        return (byte) value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(long value) {
+        return (byte) value;
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(float value) {
+        return new UByte((byte) value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(double value) {
+        return new UByte((byte) value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(int value) {
+        return new UByte((byte) value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(long value) {
+        return new UByte((byte) value);
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(float value) {
+        return (short) value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(double value) {
+        return (short) value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(int value) {
+        return (short) value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(long value) {
+        return (short) value;
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(float value) {
+        return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(double value) {
+        return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(int value) {
+        return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(long value) {
+        return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(float value) {
+        return saturateToSignedInt(value);
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(double value) {
+        return saturateToSignedInt(value);
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(long value) {
+        return saturateToSignedInt(value);
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(float value) {
+        return saturateToSignedLong(value);
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(double value) {
+        return saturateToSignedLong(value);
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(int value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(float value) {
+        return saturateToSignedByte(value);
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(double value) {
+        return saturateToSignedByte(value);
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(int value) {
+        return saturateToSignedByte(value);
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(long value) {
+        return saturateToSignedByte(value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(float value) {
+        return new UByte(saturateToUnsignedByte(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(double value) {
+        return new UByte(saturateToUnsignedByte(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(int value) {
+        return new UByte(saturateToUnsignedByte(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(long value) {
+        return new UByte(saturateToUnsignedByte(value));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(float value) {
+        return saturateToSignedShort(value);
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(double value) {
+        return saturateToSignedShort(value);
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(int value) {
+        return saturateToSignedShort(value);
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(long value) {
+        return saturateToSignedShort(value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(float value) {
+        return new UShort(saturateToUnsignedShort(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(double value) {
+        return new UShort(saturateToUnsignedShort(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(int value) {
+        return new UShort(saturateToUnsignedShort(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(long value) {
+        return new UShort(saturateToUnsignedShort(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(float value) {
+        return new UInt(saturateToUnsignedInt(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(double value) {
+        return new UInt(saturateToUnsignedInt(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(int value) {
+        return new UInt(saturateToUnsignedInt(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(long value) {
+        return new UInt(saturateToUnsignedInt(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(float value) {
+        return new ULong(saturateToUnsignedLong(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(double value) {
+        return new ULong(saturateToUnsignedLong(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(int value) {
+        return new ULong(saturateToUnsignedLong(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(long value) {
+        return new ULong(saturateToUnsignedLong(value));
+    }
+
     @GPUIntrinsic(code = "((uint) ({0}))")
     public static UInt convert_uint(int value) {
         return new UInt(value);
+    }
+
+    @GPUIntrinsic(code = "((uint) ({0}))")
+    public static UInt convert_uint(UByte value) {
+        return new UInt(Byte.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "((uint) ({0}))")
+    public static UInt convert_uint(UShort value) {
+        return new UInt(Short.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "((uint) ({0}))")
+    public static UInt convert_uint(UInt value) {
+        return new UInt(value.value);
+    }
+
+    @GPUIntrinsic(code = "((uint) ({0}))")
+    public static UInt convert_uint(ULong value) {
+        return new UInt((int) value.value);
     }
 
     @GPUIntrinsic(code = "((uint) ({0}))")
@@ -1906,6 +2535,26 @@ public final class GPU {
     @GPUIntrinsic(code = "((ulong) ({0}))")
     public static ULong convert_ulong(int value) {
         return new ULong(value);
+    }
+
+    @GPUIntrinsic(code = "((ulong) ({0}))")
+    public static ULong convert_ulong(UByte value) {
+        return new ULong(Byte.toUnsignedLong(value.value));
+    }
+
+    @GPUIntrinsic(code = "((ulong) ({0}))")
+    public static ULong convert_ulong(UShort value) {
+        return new ULong(Short.toUnsignedLong(value.value));
+    }
+
+    @GPUIntrinsic(code = "((ulong) ({0}))")
+    public static ULong convert_ulong(UInt value) {
+        return new ULong(Integer.toUnsignedLong(value.value));
+    }
+
+    @GPUIntrinsic(code = "((ulong) ({0}))")
+    public static ULong convert_ulong(ULong value) {
+        return new ULong(value.value);
     }
 
     @GPUIntrinsic(code = "((ulong) ({0}))")
@@ -2131,12 +2780,461 @@ public final class GPU {
                 : (float) Math.ceil(value - 0.5f);
     }
 
+    private static byte saturateToSignedByte(float value) {
+        return saturateToSignedByte((double) truncFloat(value));
+    }
+
+    private static int saturateToSignedInt(float value) {
+        return saturateToSignedInt((double) truncFloat(value));
+    }
+
+    private static int saturateToSignedInt(double value) {
+        if (Double.isNaN(value)) {
+            return 0;
+        }
+        if (value < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) value;
+    }
+
+    private static int saturateToSignedInt(long value) {
+        if (value < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) value;
+    }
+
+    private static long saturateToSignedLong(float value) {
+        return saturateToSignedLong((double) truncFloat(value));
+    }
+
+    private static long saturateToSignedLong(double value) {
+        if (Double.isNaN(value)) {
+            return 0L;
+        }
+        if (value < Long.MIN_VALUE) {
+            return Long.MIN_VALUE;
+        }
+        if (value > Long.MAX_VALUE) {
+            return Long.MAX_VALUE;
+        }
+        return (long) value;
+    }
+
+    private static byte saturateToSignedByte(double value) {
+        if (Double.isNaN(value)) {
+            return 0;
+        }
+        if (value < Byte.MIN_VALUE) {
+            return Byte.MIN_VALUE;
+        }
+        if (value > Byte.MAX_VALUE) {
+            return Byte.MAX_VALUE;
+        }
+        return (byte) value;
+    }
+
+    private static byte saturateToSignedByte(int value) {
+        if (value < Byte.MIN_VALUE) {
+            return Byte.MIN_VALUE;
+        }
+        if (value > Byte.MAX_VALUE) {
+            return Byte.MAX_VALUE;
+        }
+        return (byte) value;
+    }
+
+    private static byte saturateToSignedByte(long value) {
+        if (value < Byte.MIN_VALUE) {
+            return Byte.MIN_VALUE;
+        }
+        if (value > Byte.MAX_VALUE) {
+            return Byte.MAX_VALUE;
+        }
+        return (byte) value;
+    }
+
+    private static short saturateToSignedShort(float value) {
+        return saturateToSignedShort((double) truncFloat(value));
+    }
+
+    private static short saturateToSignedShort(double value) {
+        if (Double.isNaN(value)) {
+            return 0;
+        }
+        if (value < Short.MIN_VALUE) {
+            return Short.MIN_VALUE;
+        }
+        if (value > Short.MAX_VALUE) {
+            return Short.MAX_VALUE;
+        }
+        return (short) value;
+    }
+
+    private static short saturateToSignedShort(int value) {
+        if (value < Short.MIN_VALUE) {
+            return Short.MIN_VALUE;
+        }
+        if (value > Short.MAX_VALUE) {
+            return Short.MAX_VALUE;
+        }
+        return (short) value;
+    }
+
+    private static short saturateToSignedShort(long value) {
+        if (value < Short.MIN_VALUE) {
+            return Short.MIN_VALUE;
+        }
+        if (value > Short.MAX_VALUE) {
+            return Short.MAX_VALUE;
+        }
+        return (short) value;
+    }
+
+    private static byte saturateToUnsignedByte(float value) {
+        return saturateToUnsignedByte((double) truncFloat(value));
+    }
+
+    private static byte saturateToUnsignedByte(double value) {
+        if (Double.isNaN(value) || value <= 0.0) {
+            return 0;
+        }
+        if (value >= 255.0) {
+            return (byte) 0xFF;
+        }
+        return (byte) (((int) value) & 0xFF);
+    }
+
+    private static byte saturateToUnsignedByte(int value) {
+        if (value <= 0) {
+            return 0;
+        }
+        if (value >= 255) {
+            return (byte) 0xFF;
+        }
+        return (byte) (value & 0xFF);
+    }
+
+    private static byte saturateToUnsignedByte(long value) {
+        if (value <= 0L) {
+            return 0;
+        }
+        if (value >= 255L) {
+            return (byte) 0xFF;
+        }
+        return (byte) (((int) value) & 0xFF);
+    }
+
+    private static short saturateToUnsignedShort(float value) {
+        return saturateToUnsignedShort((double) truncFloat(value));
+    }
+
+    private static int saturateToUnsignedInt(float value) {
+        return saturateToUnsignedInt((double) truncFloat(value));
+    }
+
+    private static int saturateToUnsignedInt(double value) {
+        if (Double.isNaN(value) || value <= 0.0) {
+            return 0;
+        }
+        if (value >= UINT_MAX_AS_DOUBLE) {
+            return -1;
+        }
+        if (value < 2147483648.0) {
+            return (int) value;
+        }
+        return (int) (value - 4294967296.0);
+    }
+
+    private static int saturateToUnsignedInt(int value) {
+        return value <= 0 ? 0 : value;
+    }
+
+    private static int saturateToUnsignedInt(long value) {
+        if (value <= 0L) {
+            return 0;
+        }
+        if (value >= UINT_MAX_AS_DOUBLE) {
+            return -1;
+        }
+        return (int) value;
+    }
+
+    private static long saturateToUnsignedLong(float value) {
+        return saturateToUnsignedLong((double) truncFloat(value));
+    }
+
+    private static long saturateToUnsignedLong(double value) {
+        if (Double.isNaN(value) || value <= 0.0) {
+            return 0L;
+        }
+        if (value >= ULONG_MAX_AS_DOUBLE) {
+            return -1L;
+        }
+        if (value < ULONG_SIGN_THRESHOLD_AS_DOUBLE) {
+            return (long) value;
+        }
+        return (long) (value - ULONG_WRAP_AS_DOUBLE);
+    }
+
+    private static long saturateToUnsignedLong(int value) {
+        return value <= 0 ? 0L : value;
+    }
+
+    private static long saturateToUnsignedLong(long value) {
+        return value <= 0L ? 0L : value;
+    }
+
+    private static short saturateToUnsignedShort(double value) {
+        if (Double.isNaN(value) || value <= 0.0) {
+            return 0;
+        }
+        if (value >= 65535.0) {
+            return (short) 0xFFFF;
+        }
+        return (short) (((int) value) & 0xFFFF);
+    }
+
+    private static short saturateToUnsignedShort(int value) {
+        if (value <= 0) {
+            return 0;
+        }
+        if (value >= 65535) {
+            return (short) 0xFFFF;
+        }
+        return (short) (value & 0xFFFF);
+    }
+
+    private static short saturateToUnsignedShort(long value) {
+        if (value <= 0L) {
+            return 0;
+        }
+        if (value >= 65535L) {
+            return (short) 0xFFFF;
+        }
+        return (short) (((int) value) & 0xFFFF);
+    }
+
     private static byte minUnsignedByte(byte left, byte right) {
         return Integer.compare(Byte.toUnsignedInt(left), Byte.toUnsignedInt(right)) <= 0 ? left : right;
     }
 
+    private static byte absDiffUnsignedByte(byte left, byte right) {
+        int leftValue = Byte.toUnsignedInt(left);
+        int rightValue = Byte.toUnsignedInt(right);
+        return (byte) Math.abs(leftValue - rightValue);
+    }
+
+    private static short absDiffUnsignedShort(short left, short right) {
+        int leftValue = Short.toUnsignedInt(left);
+        int rightValue = Short.toUnsignedInt(right);
+        return (short) Math.abs(leftValue - rightValue);
+    }
+
+    private static int absDiffUnsignedInt(int left, int right) {
+        long leftValue = Integer.toUnsignedLong(left);
+        long rightValue = Integer.toUnsignedLong(right);
+        return (int) Math.abs(leftValue - rightValue);
+    }
+
+    private static long absDiffUnsignedLong(long left, long right) {
+        java.math.BigInteger leftValue = unsignedBigInteger(left);
+        java.math.BigInteger rightValue = unsignedBigInteger(right);
+        return leftValue.subtract(rightValue).abs().longValue();
+    }
+
+    private static long signedMulHiLong(long left, long right) {
+        java.math.BigInteger product = java.math.BigInteger.valueOf(left).multiply(java.math.BigInteger.valueOf(right));
+        return product.shiftRight(64).longValue();
+    }
+
+    private static byte saturatingAddUnsignedByte(byte left, byte right) {
+        int result = Byte.toUnsignedInt(left) + Byte.toUnsignedInt(right);
+        return (byte) Math.min(0xFF, result);
+    }
+
+    private static short saturatingAddUnsignedShort(short left, short right) {
+        int result = Short.toUnsignedInt(left) + Short.toUnsignedInt(right);
+        return (short) Math.min(0xFFFF, result);
+    }
+
+    private static int saturatingAddUnsignedInt(int left, int right) {
+        long result = Integer.toUnsignedLong(left) + Integer.toUnsignedLong(right);
+        return result >= 0xFFFF_FFFFL ? -1 : (int) result;
+    }
+
+    private static long saturatingAddUnsignedLong(long left, long right) {
+        return Long.compareUnsigned(left, -1L - right) > 0 ? -1L : left + right;
+    }
+
+    private static byte saturatingSubUnsignedByte(byte left, byte right) {
+        int result = Byte.toUnsignedInt(left) - Byte.toUnsignedInt(right);
+        return (byte) Math.max(0, result);
+    }
+
+    private static short saturatingSubUnsignedShort(short left, short right) {
+        int result = Short.toUnsignedInt(left) - Short.toUnsignedInt(right);
+        return (short) Math.max(0, result);
+    }
+
+    private static int saturatingSubUnsignedInt(int left, int right) {
+        return Integer.compareUnsigned(left, right) < 0 ? 0 : left - right;
+    }
+
+    private static long saturatingSubUnsignedLong(long left, long right) {
+        return Long.compareUnsigned(left, right) < 0 ? 0L : left - right;
+    }
+
+    private static byte saturatingMadUnsignedByte(byte left, byte right, byte addend) {
+        int result = (Byte.toUnsignedInt(left) * Byte.toUnsignedInt(right)) + Byte.toUnsignedInt(addend);
+        return (byte) Math.min(0xFF, result);
+    }
+
+    private static byte saturatingMulUnsignedByte(byte left, byte right) {
+        int result = Byte.toUnsignedInt(left) * Byte.toUnsignedInt(right);
+        return (byte) Math.min(0xFF, result);
+    }
+
+    private static short saturatingMadUnsignedShort(short left, short right, short addend) {
+        int result = (Short.toUnsignedInt(left) * Short.toUnsignedInt(right)) + Short.toUnsignedInt(addend);
+        return (short) Math.min(0xFFFF, result);
+    }
+
+    private static short saturatingMulUnsignedShort(short left, short right) {
+        int result = Short.toUnsignedInt(left) * Short.toUnsignedInt(right);
+        return (short) Math.min(0xFFFF, result);
+    }
+
+    private static int saturatingMadUnsignedInt(int left, int right, int addend) {
+        long result = (Integer.toUnsignedLong(left) * Integer.toUnsignedLong(right)) + Integer.toUnsignedLong(addend);
+        return result >= 0xFFFF_FFFFL ? -1 : (int) result;
+    }
+
+    private static int saturatingMulUnsignedInt(int left, int right) {
+        long result = Integer.toUnsignedLong(left) * Integer.toUnsignedLong(right);
+        return result >= 0xFFFF_FFFFL ? -1 : (int) result;
+    }
+
+    private static long saturatingMadUnsignedLong(long left, long right, long addend) {
+        java.math.BigInteger result = unsignedBigInteger(left)
+                .multiply(unsignedBigInteger(right))
+                .add(unsignedBigInteger(addend));
+        java.math.BigInteger max = unsignedBigInteger(-1L);
+        return result.compareTo(max) > 0 ? -1L : result.longValue();
+    }
+
+    private static long saturatingMulUnsignedLong(long left, long right) {
+        java.math.BigInteger result = unsignedBigInteger(left).multiply(unsignedBigInteger(right));
+        java.math.BigInteger max = unsignedBigInteger(-1L);
+        return result.compareTo(max) > 0 ? -1L : result.longValue();
+    }
+
+    private static int saturatingAddInt(int left, int right) {
+        long result = (long) left + right;
+        if (result > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (result < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) result;
+    }
+
+    private static long saturatingAddLong(long left, long right) {
+        if (right > 0 && left > Long.MAX_VALUE - right) {
+            return Long.MAX_VALUE;
+        }
+        if (right < 0 && left < Long.MIN_VALUE - right) {
+            return Long.MIN_VALUE;
+        }
+        return left + right;
+    }
+
+    private static int saturatingSubInt(int left, int right) {
+        long result = (long) left - right;
+        if (result > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (result < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) result;
+    }
+
+    private static long saturatingSubLong(long left, long right) {
+        if (right < 0 && left > Long.MAX_VALUE + right) {
+            return Long.MAX_VALUE;
+        }
+        if (right > 0 && left < Long.MIN_VALUE + right) {
+            return Long.MIN_VALUE;
+        }
+        return left - right;
+    }
+
+    private static int saturatingMadInt(int left, int right, int addend) {
+        long result = ((long) left * right) + addend;
+        if (result > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (result < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) result;
+    }
+
+    private static int saturatingMulInt(int left, int right) {
+        long result = (long) left * right;
+        if (result > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (result < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) result;
+    }
+
+    private static long saturatingMadLong(long left, long right, long addend) {
+        java.math.BigInteger result = java.math.BigInteger.valueOf(left)
+                .multiply(java.math.BigInteger.valueOf(right))
+                .add(java.math.BigInteger.valueOf(addend));
+        if (result.compareTo(java.math.BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            return Long.MAX_VALUE;
+        }
+        if (result.compareTo(java.math.BigInteger.valueOf(Long.MIN_VALUE)) < 0) {
+            return Long.MIN_VALUE;
+        }
+        return result.longValue();
+    }
+
+    private static long saturatingMulLong(long left, long right) {
+        java.math.BigInteger result = java.math.BigInteger.valueOf(left)
+                .multiply(java.math.BigInteger.valueOf(right));
+        if (result.compareTo(java.math.BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            return Long.MAX_VALUE;
+        }
+        if (result.compareTo(java.math.BigInteger.valueOf(Long.MIN_VALUE)) < 0) {
+            return Long.MIN_VALUE;
+        }
+        return result.longValue();
+    }
+
     private static short minUnsignedShort(short left, short right) {
         return Integer.compare(Short.toUnsignedInt(left), Short.toUnsignedInt(right)) <= 0 ? left : right;
+    }
+
+    private static java.math.BigInteger unsignedBigInteger(long value) {
+        java.math.BigInteger base = java.math.BigInteger.valueOf(value & Long.MAX_VALUE);
+        if (value < 0) {
+            base = base.setBit(63);
+        }
+        return base;
     }
 
     private static int minUnsignedInt(int left, int right) {

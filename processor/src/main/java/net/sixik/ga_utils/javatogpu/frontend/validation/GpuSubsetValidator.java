@@ -18,6 +18,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -35,7 +36,9 @@ import com.github.javaparser.ast.stmt.WhileStmt;
 import net.sixik.ga_utils.javatogpu.frontend.GpuStructAliasRegistry;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuBuiltinConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.GpuConstantDataKind;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.GpuAddressSpace;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuParameter;
@@ -129,6 +132,9 @@ public final class GpuSubsetValidator {
         Map<String, List<ConstantDescriptor>> constantRegistry = buildConstantRegistry(kernelMethod, helperMethods, structs, issues);
         GpuStructAliasRegistry<StructDescriptor> structRegistry = buildStructRegistry(structs);
         validateStructFieldTypes(structs, structRegistry, issues);
+        validateConstantData(kernelMethod.constantData(), kernelMethod.declaration(), issues);
+        helperMethods.forEach(helperMethod -> validateConstantData(helperMethod.constantData(), helperMethod.declaration(), issues));
+        structs.forEach(struct -> validateConstantData(struct.constantData(), null, issues));
 
         helperMethods.forEach(helperMethod -> validateMethod(helperMethod, helperRegistry, constantRegistry, structRegistry, issues, false));
         validateMethod(kernelMethod, helperRegistry, constantRegistry, structRegistry, issues, true);
@@ -471,6 +477,42 @@ public final class GpuSubsetValidator {
         }
     }
 
+    private void validateConstantData(List<ParsedGpuConstantData> constantData, Node issueNode, List<GpuValidationIssue> issues) {
+        for (ParsedGpuConstantData constant : constantData) {
+            if (!GpuTypeSupport.isArrayType(constant.javaType())) {
+                addConstantDataIssue(issueNode, issues, constantDataLabel(constant) + " requires an array type: " + constant.javaType());
+                continue;
+            }
+            String componentType = GpuTypeSupport.componentType(constant.javaType());
+            if (!GpuTypeSupport.isSupportedScalarType(componentType)) {
+                addConstantDataIssue(issueNode, issues, constantDataLabel(constant) + " currently supports only primitive scalar arrays: " + constant.javaType());
+                continue;
+            }
+            if (constant.kind() == GpuConstantDataKind.EXTERN) {
+                if (!"null".equals(constant.initializerSource().strip())) {
+                    addConstantDataIssue(issueNode, issues, "@GPUExternConstantData requires a declaration-only null initializer: " + constant.name());
+                }
+                continue;
+            }
+            String initializer = constant.initializerSource().strip();
+            if (!initializer.startsWith("{") || !initializer.endsWith("}")) {
+                addConstantDataIssue(issueNode, issues, constantDataLabel(constant) + " requires an inline array initializer: " + constant.name());
+            }
+        }
+    }
+
+    private String constantDataLabel(ParsedGpuConstantData constant) {
+        return constant.kind() == GpuConstantDataKind.EXTERN ? "@GPUExternConstantData" : "@GPUConstantData";
+    }
+
+    private void addConstantDataIssue(Node issueNode, List<GpuValidationIssue> issues, String message) {
+        if (issueNode != null) {
+            issues.add(issue(issueNode, message));
+        } else {
+            issues.add(new GpuValidationIssue(1, 1, message));
+        }
+    }
+
     private void validateUniqueAttribute(Node node, AttributeSpec attribute, Set<String> seenUniqueAttributes, List<GpuValidationIssue> issues) {
         validateUniqueAttribute(node, attribute, seenUniqueAttributes, issues, "Duplicate OpenCL attribute: " + attribute.name());
     }
@@ -607,12 +649,19 @@ public final class GpuSubsetValidator {
             }
 
             VariableDeclarator variable = declarationExpr.getVariables().get(0);
-            validateVariableType(variable, issues, context.structRegistry());
             if (variable.getInitializer().isEmpty()) {
                 issues.add(issue(variable, "Variable declarations in @GPU methods must have an initializer"));
                 return;
             }
-            validateExpression(variable.getInitializer().orElseThrow(), issues, scopes, context);
+            if (isPrivateFixedArrayDeclaration(variable)) {
+                validatePrivateFixedArrayDeclaration(variable, issues, scopes, context);
+                scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
+                return;
+            }
+            validateVariableType(variable, issues, context.structRegistry());
+            Expression initializer = variable.getInitializer().orElseThrow();
+            validateExpression(initializer, issues, scopes, context);
+            validateVariableInitializerCompatibility(variable, initializer, issues, scopes, context);
             scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
             return;
         }
@@ -764,13 +813,86 @@ public final class GpuSubsetValidator {
         }
 
         VariableDeclarator variable = declarationExpr.getVariables().get(0);
-        validateVariableType(variable, issues, context.structRegistry());
         if (variable.getInitializer().isEmpty()) {
             issues.add(issue(variable, "For initializer variables in @GPU methods must have an initializer"));
             return;
         }
-        validateExpression(variable.getInitializer().orElseThrow(), issues, scopes, context);
+        if (isPrivateFixedArrayDeclaration(variable)) {
+            validatePrivateFixedArrayDeclaration(variable, issues, scopes, context);
+            scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
+            return;
+        }
+        validateVariableType(variable, issues, context.structRegistry());
+        Expression initializer = variable.getInitializer().orElseThrow();
+        validateExpression(initializer, issues, scopes, context);
+        validateVariableInitializerCompatibility(variable, initializer, issues, scopes, context);
         scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
+    }
+
+    private void validatePrivateFixedArrayDeclaration(
+            VariableDeclarator variable,
+            List<GpuValidationIssue> issues,
+            Deque<Map<String, String>> scopes,
+            ValidationContext context
+    ) {
+        String typeName = variable.getTypeAsString();
+        if (!GpuTypeSupport.isArrayType(typeName)) {
+            issues.add(issue(variable, "Private fixed-size arrays must use a one-dimensional array type in @GPU methods: " + typeName));
+            return;
+        }
+        String elementType = GpuTypeSupport.componentType(typeName);
+        if (!GpuTypeSupport.isSupportedScalarType(elementType)) {
+            issues.add(issue(variable, "Private fixed-size arrays currently support only primitive scalar element types in @GPU methods: " + typeName));
+            return;
+        }
+        ArrayCreationExpr creationExpr = variable.getInitializer().orElseThrow().asArrayCreationExpr();
+        if (creationExpr.getLevels().size() != 1 || creationExpr.getInitializer().isPresent()) {
+            issues.add(issue(variable, "Private fixed-size arrays must use new T[SIZE] without an inline initializer in @GPU methods: " + variable));
+            return;
+        }
+        Expression sizeExpression = creationExpr.getLevels().get(0).getDimension().orElse(null);
+        if (sizeExpression == null) {
+            issues.add(issue(variable, "Private fixed-size arrays must declare an explicit size in @GPU methods: " + variable.getNameAsString()));
+            return;
+        }
+        validateExpression(sizeExpression, issues, scopes, context);
+        String sizeType = inferExpressionType(sizeExpression, scopes, context);
+        if (!GpuTypeSupport.isIntegralScalarType(sizeType)) {
+            issues.add(issue(sizeExpression, "Private fixed-size array size must be an integral scalar expression in @GPU methods"));
+        }
+    }
+
+    private boolean isPrivateFixedArrayDeclaration(VariableDeclarator variable) {
+        if (!GpuTypeSupport.isArrayType(variable.getTypeAsString()) || variable.getInitializer().isEmpty()) {
+            return false;
+        }
+        Expression initializer = variable.getInitializer().orElseThrow();
+        if (!(initializer instanceof ArrayCreationExpr creationExpr)) {
+            return false;
+        }
+        return creationExpr.getLevels().size() == 1
+                && creationExpr.getLevels().get(0).getDimension().isPresent()
+                && creationExpr.getInitializer().isEmpty();
+    }
+
+    private void validateVariableInitializerCompatibility(
+            VariableDeclarator variable,
+            Expression initializer,
+            List<GpuValidationIssue> issues,
+            Deque<Map<String, String>> scopes,
+            ValidationContext context
+    ) {
+        String targetType = variable.getTypeAsString();
+        String initializerType = inferExpressionType(initializer, scopes, context);
+        if (GpuTypeSupport.isArrayCompatibleWithPointerType(initializerType, targetType)) {
+            return;
+        }
+        if (GpuTypeSupport.isSupportedPointerType(targetType)
+                && initializerType != null
+                && GpuTypeSupport.isSupportedPointerType(initializerType)
+                && targetType.equals(initializerType)) {
+            return;
+        }
     }
 
     private void validateForUpdate(Expression expression, List<GpuValidationIssue> issues, Deque<Map<String, String>> scopes, ValidationContext context) {
@@ -1074,7 +1196,18 @@ public final class GpuSubsetValidator {
                 continue;
             }
             String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
-            if (storageType == null || !GpuTypeSupport.isSupportedPointerType(GpuTypeSupport.declaredType(storageType))) {
+            if (storageType == null) {
+                issues.add(issue(argument, "Pointer helper arguments must reference a supported pointer variable: " + argument));
+                continue;
+            }
+            String declaredStorageType = GpuTypeSupport.declaredType(storageType);
+            if (GpuTypeSupport.isSupportedPointerType(declaredStorageType)) {
+                continue;
+            }
+            if (GpuTypeSupport.isArrayCompatibleWithPointerType(declaredStorageType, expectedType)) {
+                continue;
+            }
+            if (!GpuTypeSupport.isSupportedPointerType(declaredStorageType)) {
                 issues.add(issue(argument, "Pointer helper arguments must reference a supported pointer variable: " + argument));
             }
         }
@@ -1096,10 +1229,21 @@ public final class GpuSubsetValidator {
     }
 
     private void validateFieldAccess(FieldAccessExpr fieldAccessExpr, List<GpuValidationIssue> issues, Deque<Map<String, String>> scopes, ValidationContext context) {
-        if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr && "value".equals(fieldAccessExpr.getNameAsString())) {
-            String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
-            String declaredType = GpuTypeSupport.declaredType(storageType);
-            if (storageType == null || (!GpuTypeSupport.isSupportedPointerType(declaredType) && !GpuTypeSupport.isSupportedScalarAliasType(declaredType))) {
+        if ("value".equals(fieldAccessExpr.getNameAsString())) {
+            if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr) {
+                String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+                if (storageType == null) {
+                    issues.add(issue(fieldAccessExpr, "The .value field is only supported on pointer helpers and unsigned scalar aliases in @GPU methods"));
+                    return;
+                }
+                String declaredType = GpuTypeSupport.declaredType(storageType);
+                if (!GpuTypeSupport.isSupportedPointerType(declaredType) && !GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
+                    issues.add(issue(fieldAccessExpr, "The .value field is only supported on pointer helpers and unsigned scalar aliases in @GPU methods"));
+                }
+                return;
+            }
+            String scopeType = inferExpressionType(fieldAccessExpr.getScope(), scopes, context);
+            if (!GpuTypeSupport.isSupportedPointerType(scopeType) && !GpuTypeSupport.isSupportedScalarAliasType(scopeType)) {
                 issues.add(issue(fieldAccessExpr, "The .value field is only supported on pointer helpers and unsigned scalar aliases in @GPU methods"));
             }
             return;
@@ -1250,17 +1394,27 @@ public final class GpuSubsetValidator {
         }
 
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr && "value".equals(fieldAccessExpr.getNameAsString())) {
-                String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
-                if (storageType == null) {
+            if ("value".equals(fieldAccessExpr.getNameAsString())) {
+                if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr) {
+                    String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+                    if (storageType == null) {
+                        return null;
+                    }
+                    String declaredType = GpuTypeSupport.declaredType(storageType);
+                    if (GpuTypeSupport.isSupportedPointerType(declaredType)) {
+                        return GpuTypeSupport.pointerValueType(storageType);
+                    }
+                    if (GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
+                        return GpuTypeSupport.scalarAliasValueType(declaredType);
+                    }
                     return null;
                 }
-                String declaredType = GpuTypeSupport.declaredType(storageType);
-                if (GpuTypeSupport.isSupportedPointerType(declaredType)) {
-                    return GpuTypeSupport.pointerValueType(storageType);
+                String scopeType = inferExpressionType(fieldAccessExpr.getScope(), scopes, context);
+                if (GpuTypeSupport.isSupportedPointerType(scopeType)) {
+                    return GpuTypeSupport.pointerValueType(scopeType);
                 }
-                if (GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
-                    return GpuTypeSupport.scalarAliasValueType(declaredType);
+                if (GpuTypeSupport.isSupportedScalarAliasType(scopeType)) {
+                    return GpuTypeSupport.scalarAliasValueType(scopeType);
                 }
                 return null;
             }
@@ -1342,6 +1496,12 @@ public final class GpuSubsetValidator {
             String receiverType = methodCallExpr.getScope()
                     .map(scope -> inferExpressionType((Expression) scope, scopes, context))
                     .orElse(null);
+            if (receiverType == null && methodCallExpr.getScope().isPresent() && methodCallExpr.getScope().orElseThrow() instanceof NameExpr nameExpr) {
+                String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+                if (storageType != null) {
+                    receiverType = GpuTypeSupport.declaredType(storageType);
+                }
+            }
             if (intrinsicDatabase.isAllowedOwner(owner)) {
                 try {
                     return intrinsicDatabase.require(owner, methodCallExpr.getNameAsString(), inferArgumentTypes(methodCallExpr, scopes, context)).resultType();
@@ -1552,6 +1712,9 @@ public final class GpuSubsetValidator {
             return false;
         }
         for (int i = 0; i < argumentTypes.size(); i++) {
+            if (GpuTypeSupport.isArrayCompatibleWithPointerType(argumentTypes.get(i), parameterTypes.get(i))) {
+                continue;
+            }
             if (!GpuTypeSupport.isHelperArgumentCompatible(argumentTypes.get(i), parameterTypes.get(i))) {
                 return false;
             }
@@ -1579,6 +1742,10 @@ public final class GpuSubsetValidator {
     private int helperCompatibilityScore(List<String> argumentTypes, List<String> parameterTypes) {
         int score = 0;
         for (int i = 0; i < argumentTypes.size(); i++) {
+            if (GpuTypeSupport.isArrayCompatibleWithPointerType(argumentTypes.get(i), parameterTypes.get(i))) {
+                score += 0;
+                continue;
+            }
             score += GpuTypeSupport.helperCompatibilityScore(argumentTypes.get(i), parameterTypes.get(i));
         }
         return score;
@@ -1694,7 +1861,34 @@ public final class GpuSubsetValidator {
                         constant.ownerQualifiedName(),
                         constant.name(),
                         constant.javaType(),
-                        constant.sourceText()
+                        constant.sourceText(),
+                        null,
+                        false
+                ));
+            }
+            for (ParsedGpuConstantData constant : method.constantData()) {
+                List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+                ConstantDescriptor existingConstant = constants.stream()
+                        .filter(existing -> sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName()))
+                        .findFirst()
+                        .orElse(null);
+                if (existingConstant != null) {
+                    if (!existingConstant.javaType().equals(constant.javaType())
+                            || !existingConstant.sourceText().equals(constant.initializerSource())
+                            || existingConstant.constantDataKind() != constant.kind()
+                            || !existingConstant.constantData()) {
+                        issues.add(issue(method.declaration(), "Duplicate GPU constant in owner: " + constant.name()));
+                    }
+                    continue;
+                }
+                constants.add(new ConstantDescriptor(
+                        constant.ownerSimpleName(),
+                        constant.ownerQualifiedName(),
+                        constant.name(),
+                        constant.javaType(),
+                        constant.initializerSource(),
+                        constant.kind(),
+                        true
                 ));
             }
         }
@@ -1717,7 +1911,34 @@ public final class GpuSubsetValidator {
                         constant.ownerQualifiedName(),
                         constant.name(),
                         constant.javaType(),
-                        constant.sourceText()
+                        constant.sourceText(),
+                        null,
+                        false
+                ));
+            }
+            for (ParsedGpuConstantData constant : struct.constantData()) {
+                List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+                ConstantDescriptor existingConstant = constants.stream()
+                        .filter(existing -> sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName()))
+                        .findFirst()
+                        .orElse(null);
+                if (existingConstant != null) {
+                    if (!existingConstant.javaType().equals(constant.javaType())
+                            || !existingConstant.sourceText().equals(constant.initializerSource())
+                            || existingConstant.constantDataKind() != constant.kind()
+                            || !existingConstant.constantData()) {
+                        issues.add(new GpuValidationIssue(1, 1, "Duplicate GPU struct constant in owner: " + constant.name()));
+                    }
+                    continue;
+                }
+                constants.add(new ConstantDescriptor(
+                        constant.ownerSimpleName(),
+                        constant.ownerQualifiedName(),
+                        constant.name(),
+                        constant.javaType(),
+                        constant.initializerSource(),
+                        constant.kind(),
+                        true
                 ));
             }
         }
@@ -1736,7 +1957,9 @@ public final class GpuSubsetValidator {
                     constant.ownerQualifiedName(),
                     constant.name(),
                     constant.javaType(),
-                    constant.sourceText()
+                    constant.sourceText(),
+                    null,
+                    false
             ));
         }
         return constantRegistry;
@@ -1928,7 +2151,9 @@ public final class GpuSubsetValidator {
             String ownerQualifiedName,
             String name,
             String javaType,
-            String sourceText
+            String sourceText,
+            GpuConstantDataKind constantDataKind,
+            boolean constantData
     ) {
     }
 

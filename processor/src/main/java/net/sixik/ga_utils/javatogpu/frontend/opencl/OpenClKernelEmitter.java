@@ -21,13 +21,16 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrExpressionStateme
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrForLoop;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrIf;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrLoopBreak;
+import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrPrivateArrayDeclaration;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrReturn;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrStatement;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrSwitch;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrSwitchCase;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrVariableDeclaration;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrWhileLoop;
+import net.sixik.ga_utils.javatogpu.frontend.model.GpuConstantDataKind;
 import net.sixik.ga_utils.javatogpu.frontend.model.GpuAddressSpace;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuParameter;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
@@ -35,6 +38,7 @@ import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStructField;
 import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -62,6 +66,16 @@ public final class OpenClKernelEmitter {
     ) {
         StringBuilder builder = new StringBuilder();
         Map<String, String> helperNameIndex = buildHelperNameIndex(helperMethods);
+
+        List<ParsedGpuConstantData> constantData = collectConstantData(kernelMethod, helperMethods, structs);
+
+        for (ParsedGpuConstantData constant : constantData) {
+            emitConstantData(builder, constant);
+            builder.append("\n");
+        }
+        if (!constantData.isEmpty()) {
+            builder.append("\n");
+        }
 
         for (ParsedGpuStruct struct : structs) {
             emitStruct(builder, struct);
@@ -96,17 +110,86 @@ public final class OpenClKernelEmitter {
         return builder.toString();
     }
 
+    private List<ParsedGpuConstantData> collectConstantData(
+            GpuIrCompiledMethod kernelMethod,
+            List<GpuIrCompiledMethod> helperMethods,
+            List<ParsedGpuStruct> structs
+    ) {
+        List<ParsedGpuConstantData> constantData = new ArrayList<>();
+        LinkedHashSet<String> seenKeys = new LinkedHashSet<>();
+
+        List<ParsedGpuMethod> methods = new ArrayList<>();
+        methods.add(kernelMethod.parsedMethod());
+        helperMethods.forEach(helper -> methods.add(helper.parsedMethod()));
+        for (ParsedGpuMethod method : methods) {
+            for (ParsedGpuConstantData constant : method.constantData()) {
+                String key = constant.ownerQualifiedName() + "#" + constant.name();
+                if (seenKeys.add(key)) {
+                    constantData.add(constant);
+                }
+            }
+        }
+
+        for (ParsedGpuStruct struct : structs) {
+            for (ParsedGpuConstantData constant : struct.constantData()) {
+                String key = constant.ownerQualifiedName() + "#" + constant.name();
+                if (seenKeys.add(key)) {
+                    constantData.add(constant);
+                }
+            }
+        }
+
+        return constantData;
+    }
+
+    private void emitConstantData(StringBuilder builder, ParsedGpuConstantData constant) {
+        String elementType = emitType(GpuTypeSupport.componentType(constant.javaType()));
+        if (constant.kind() == GpuConstantDataKind.EXTERN) {
+            builder.append("extern __constant ")
+                    .append(elementType)
+                    .append(" ")
+                    .append(constant.name())
+                    .append("[];");
+            return;
+        }
+        String initializer = emitConstantDataInitializer(constant.javaType(), constant.initializerSource());
+        builder.append("__constant ")
+                .append(elementType)
+                .append(" ")
+                .append(constant.name())
+                .append("[] = ")
+                .append(initializer)
+                .append(";");
+    }
+
+    private String emitConstantDataInitializer(String javaType, String initializerSource) {
+        String source = initializerSource.strip();
+        if (!source.startsWith("{")) {
+            throw new IllegalArgumentException("GPUConstantData initializer must be an array initializer: " + initializerSource);
+        }
+        if (GpuTypeSupport.isSupportedScalarType(GpuTypeSupport.componentType(javaType))) {
+            return source;
+        }
+        throw new IllegalArgumentException("Unsupported GPUConstantData type for OpenCL emission: " + javaType);
+    }
+
     private String emitParameter(ParsedGpuParameter parameter) {
         String type = parameter.javaType();
         if (GpuTypeSupport.isSupportedImageOrSamplerType(type)) {
             return emitType(type) + " " + parameter.name();
         }
         if (GpuTypeSupport.isSupportedPointerType(type)) {
+            String storagePrefix = switch (GpuTypeSupport.pointerAddressSpace(type)) {
+                case "GLOBAL" -> "__global ";
+                case "CONSTANT" -> "__constant ";
+                case "LOCAL" -> "__local ";
+                default -> "";
+            };
             return emitQualifiedPointerParameter(
-                    "",
+                    storagePrefix,
                     emitType(GpuTypeSupport.pointerValueType(type)),
                     parameter,
-                    false
+                    "CONSTANT".equals(GpuTypeSupport.pointerAddressSpace(type))
             );
         }
         if (type.endsWith("[]")) {
@@ -187,6 +270,23 @@ public final class OpenClKernelEmitter {
         String prefix = "    ".repeat(indent);
 
         if (statement instanceof GpuIrVariableDeclaration declaration) {
+            if (GpuTypeSupport.isAddressSpacePointerType(declaration.typeName())) {
+                String storagePrefix = switch (GpuTypeSupport.pointerAddressSpace(declaration.typeName())) {
+                    case "GLOBAL" -> "__global ";
+                    case "CONSTANT" -> "__constant ";
+                    case "LOCAL" -> "__local ";
+                    default -> "";
+                };
+                builder.append(prefix)
+                        .append(storagePrefix)
+                        .append(emitType(GpuTypeSupport.pointerValueType(declaration.typeName())))
+                        .append("* ")
+                        .append(declaration.name())
+                        .append(" = ")
+                        .append(emitExpression(declaration.initializer()))
+                        .append(";\n");
+                return;
+            }
             builder.append(prefix)
                     .append(emitType(declaration.typeName()))
                     .append(" ")
@@ -194,6 +294,17 @@ public final class OpenClKernelEmitter {
                     .append(" = ")
                     .append(emitExpression(declaration.initializer()))
                     .append(";\n");
+            return;
+        }
+
+        if (statement instanceof GpuIrPrivateArrayDeclaration declaration) {
+            builder.append(prefix)
+                    .append(emitType(declaration.elementType()))
+                    .append(" ")
+                    .append(declaration.name())
+                    .append("[")
+                    .append(emitExpression(declaration.size()))
+                    .append("];\n");
             return;
         }
 
@@ -364,7 +475,24 @@ public final class OpenClKernelEmitter {
 
     private String emitForHeaderStatement(GpuIrStatement statement) {
         if (statement instanceof GpuIrVariableDeclaration declaration) {
+            if (GpuTypeSupport.isAddressSpacePointerType(declaration.typeName())) {
+                String storagePrefix = switch (GpuTypeSupport.pointerAddressSpace(declaration.typeName())) {
+                    case "GLOBAL" -> "__global ";
+                    case "CONSTANT" -> "__constant ";
+                    case "LOCAL" -> "__local ";
+                    default -> "";
+                };
+                return storagePrefix
+                        + emitType(GpuTypeSupport.pointerValueType(declaration.typeName()))
+                        + "* "
+                        + declaration.name()
+                        + " = "
+                        + emitExpression(declaration.initializer());
+            }
             return emitType(declaration.typeName()) + " " + declaration.name() + " = " + emitExpression(declaration.initializer());
+        }
+        if (statement instanceof GpuIrPrivateArrayDeclaration declaration) {
+            return emitType(declaration.elementType()) + " " + declaration.name() + "[" + emitExpression(declaration.size()) + "]";
         }
         if (statement instanceof GpuIrAssignment assignment) {
             return emitExpression(assignment.target()) + " = " + emitExpression(assignment.value());

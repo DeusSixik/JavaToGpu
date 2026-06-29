@@ -11,6 +11,7 @@ public record ParsedGpuMethod(
         String returnType,
         List<ParsedGpuParameter> parameters,
         List<ParsedGpuConstant> constants,
+        List<ParsedGpuConstantData> constantData,
         MethodDeclaration declaration,
         boolean inline,
         List<String> openClAttributes,

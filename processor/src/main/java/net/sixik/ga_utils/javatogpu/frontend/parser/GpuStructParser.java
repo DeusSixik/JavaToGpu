@@ -13,8 +13,11 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
+import net.sixik.ga_utils.javatogpu.frontend.model.GpuConstantDataKind;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStructField;
+import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,8 +45,38 @@ public final class GpuStructParser {
 
         List<ParsedGpuStructField> fields = new ArrayList<>();
         List<ParsedGpuConstant> constants = new ArrayList<>();
+        List<ParsedGpuConstantData> constantData = new ArrayList<>();
         for (FieldDeclaration fieldDeclaration : classDeclaration.getFields()) {
             fieldDeclaration.getVariables().forEach(variable -> {
+                if (fieldDeclaration.getAnnotationByName("GPUConstantData").isPresent()) {
+                    if (variable.getInitializer().isPresent()
+                            && GpuTypeSupport.isArrayType(variable.getTypeAsString())
+                            && GpuTypeSupport.isSupportedScalarType(GpuTypeSupport.componentType(variable.getTypeAsString()))) {
+                        constantData.add(new ParsedGpuConstantData(
+                                resolvedSimpleName,
+                                resolvedQualifiedName,
+                                variable.getNameAsString(),
+                                variable.getTypeAsString(),
+                                variable.getInitializer().orElseThrow().toString(),
+                                GpuConstantDataKind.EMBEDDED
+                        ));
+                    }
+                    return;
+                }
+                if (fieldDeclaration.getAnnotationByName("GPUExternConstantData").isPresent()) {
+                    if (GpuTypeSupport.isArrayType(variable.getTypeAsString())
+                            && GpuTypeSupport.isSupportedScalarType(GpuTypeSupport.componentType(variable.getTypeAsString()))) {
+                        constantData.add(new ParsedGpuConstantData(
+                                resolvedSimpleName,
+                                resolvedQualifiedName,
+                                variable.getNameAsString(),
+                                variable.getTypeAsString(),
+                                variable.getInitializer().map(Expression::toString).orElse(""),
+                                GpuConstantDataKind.EXTERN
+                        ));
+                    }
+                    return;
+                }
                 if (fieldDeclaration.isStatic() && fieldDeclaration.isFinal() && variable.getInitializer().isPresent()) {
                     constants.add(new ParsedGpuConstant(
                             resolvedSimpleName,
@@ -67,6 +100,7 @@ public final class GpuStructParser {
                 resolvedQualifiedName,
                 List.copyOf(fields),
                 List.copyOf(constants),
+                List.copyOf(constantData),
                 parseOpenClAttributes(classDeclaration.getAnnotations())
         );
     }

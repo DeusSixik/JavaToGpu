@@ -17,6 +17,7 @@ import com.github.javaparser.ast.expr.LongLiteralExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.stmt.BreakStmt;
@@ -55,6 +56,7 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrDoWhileLoop;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrExpressionStatement;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrForLoop;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrIf;
+import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrPrivateArrayDeclaration;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrReturn;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrStatement;
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrSwitch;
@@ -63,6 +65,8 @@ import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrVariableDeclarati
 import net.sixik.ga_utils.javatogpu.frontend.ir.statement.GpuIrWhileLoop;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
+import net.sixik.ga_utils.javatogpu.frontend.model.GpuConstantDataKind;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.opencl.OpenClKernelNaming;
 import net.sixik.ga_utils.javatogpu.types.GpuTypeSupport;
@@ -237,9 +241,18 @@ public final class GpuIrLowerer {
 
             if (expression instanceof VariableDeclarationExpr declarationExpr) {
                 VariableDeclarator variable = declarationExpr.getVariables().get(0);
-                GpuIrExpression initializer = variable.getInitializer()
-                        .map(value -> lowerExpression(value, scopes, context))
+                if (isPrivateFixedArrayDeclaration(variable)) {
+                    scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
+                    ArrayCreationExpr creationExpr = variable.getInitializer().orElseThrow().asArrayCreationExpr();
+                    return new GpuIrPrivateArrayDeclaration(
+                            GpuTypeSupport.componentType(variable.getTypeAsString()),
+                            variable.getNameAsString(),
+                            lowerExpression(creationExpr.getLevels().get(0).getDimension().orElseThrow(), scopes, context)
+                    );
+                }
+                Expression initializerExpression = variable.getInitializer()
                         .orElseThrow(() -> new IllegalArgumentException("Variable declaration must have an initializer"));
+                GpuIrExpression initializer = lowerVariableInitializer(variable.getTypeAsString(), initializerExpression, scopes, context);
                 scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
                 return new GpuIrVariableDeclaration(
                         variable.getTypeAsString(),
@@ -400,9 +413,18 @@ public final class GpuIrLowerer {
     private GpuIrStatement lowerForInitializer(Expression expression, Deque<Map<String, String>> scopes, LoweringContext context) {
         if (expression instanceof VariableDeclarationExpr declarationExpr) {
             VariableDeclarator variable = declarationExpr.getVariables().get(0);
-            GpuIrExpression initializer = variable.getInitializer()
-                    .map(value -> lowerExpression(value, scopes, context))
+            if (isPrivateFixedArrayDeclaration(variable)) {
+                scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
+                ArrayCreationExpr creationExpr = variable.getInitializer().orElseThrow().asArrayCreationExpr();
+                return new GpuIrPrivateArrayDeclaration(
+                        GpuTypeSupport.componentType(variable.getTypeAsString()),
+                        variable.getNameAsString(),
+                        lowerExpression(creationExpr.getLevels().get(0).getDimension().orElseThrow(), scopes, context)
+                );
+            }
+            Expression initializerExpression = variable.getInitializer()
                     .orElseThrow(() -> new IllegalArgumentException("For initializer must declare a value"));
+            GpuIrExpression initializer = lowerVariableInitializer(variable.getTypeAsString(), initializerExpression, scopes, context);
             scopes.peek().put(variable.getNameAsString(), variable.getTypeAsString());
             return new GpuIrVariableDeclaration(
                     variable.getTypeAsString(),
@@ -412,6 +434,36 @@ public final class GpuIrLowerer {
         }
 
         throw new IllegalArgumentException("Unsupported for initializer: " + expression);
+    }
+
+    private GpuIrExpression lowerVariableInitializer(
+            String targetType,
+            Expression initializer,
+            Deque<Map<String, String>> scopes,
+            LoweringContext context
+    ) {
+        if (GpuTypeSupport.isSupportedPointerType(targetType)
+                && initializer instanceof NameExpr nameExpr) {
+            String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+            if (GpuTypeSupport.isArrayCompatibleWithPointerType(GpuTypeSupport.declaredType(storageType), targetType)) {
+                return new GpuIrVariableRef(nameExpr.getNameAsString());
+            }
+        }
+        return lowerExpression(initializer, scopes, context);
+    }
+
+    private boolean isPrivateFixedArrayDeclaration(VariableDeclarator variable) {
+        if (!GpuTypeSupport.isArrayType(variable.getTypeAsString()) || variable.getInitializer().isEmpty()) {
+            return false;
+        }
+        Expression initializer = variable.getInitializer().orElseThrow();
+        if (!(initializer instanceof ArrayCreationExpr creationExpr)) {
+            return false;
+        }
+        if (creationExpr.getLevels().size() != 1 || creationExpr.getInitializer().isPresent()) {
+            return false;
+        }
+        return creationExpr.getLevels().get(0).getDimension().isPresent();
     }
 
     private GpuIrStatement lowerForUpdate(Expression expression, Deque<Map<String, String>> scopes, LoweringContext context) {
@@ -468,6 +520,9 @@ public final class GpuIrLowerer {
         if (expression instanceof NameExpr nameExpr) {
             ConstantDescriptor constant = resolveConstant(nameExpr.getNameAsString(), "", context);
             if (constant != null && lookupStorageType(scopes, nameExpr.getNameAsString()) == null) {
+                if (constant.constantData()) {
+                    return new GpuIrVariableRef(constant.name());
+                }
                 return new GpuIrLiteral(constant.sourceText());
             }
             return new GpuIrVariableRef(nameExpr.getNameAsString());
@@ -505,6 +560,12 @@ public final class GpuIrLowerer {
         }
 
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
+            if (arrayAccessExpr.getName() instanceof NameExpr nameExpr) {
+                ConstantDescriptor constant = resolveConstant(nameExpr.getNameAsString(), "", context);
+                if (constant != null && constant.constantData()) {
+                    return new GpuIrArrayAccess(nameExpr.getNameAsString(), lowerExpression(arrayAccessExpr.getIndex(), scopes, context));
+                }
+            }
             return new GpuIrArrayAccess(
                     arrayAccessExpr.getName().toString(),
                     lowerExpression(arrayAccessExpr.getIndex(), scopes, context)
@@ -512,14 +573,26 @@ public final class GpuIrLowerer {
         }
 
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr && "value".equals(fieldAccessExpr.getNameAsString())) {
-                String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
-                String declaredType = GpuTypeSupport.declaredType(storageType);
-                if (GpuTypeSupport.isPointerReferenceStorage(storageType)) {
-                    return new GpuIrUnary("*", new GpuIrVariableRef(nameExpr.getNameAsString()));
+            if ("value".equals(fieldAccessExpr.getNameAsString())) {
+                if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr) {
+                    String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+                    String declaredType = GpuTypeSupport.declaredType(storageType);
+                    if (GpuTypeSupport.isPointerReferenceStorage(storageType)) {
+                        return new GpuIrUnary("*", new GpuIrVariableRef(nameExpr.getNameAsString()));
+                    }
+                    if (GpuTypeSupport.isAddressSpacePointerType(declaredType)) {
+                        return new GpuIrUnary("*", new GpuIrVariableRef(nameExpr.getNameAsString()));
+                    }
+                    if (GpuTypeSupport.isSupportedPointerType(declaredType) || GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
+                        return new GpuIrVariableRef(nameExpr.getNameAsString());
+                    }
                 }
-                if (GpuTypeSupport.isSupportedPointerType(declaredType) || GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
-                    return new GpuIrVariableRef(nameExpr.getNameAsString());
+                String scopeType = inferExpressionType(fieldAccessExpr.getScope(), scopes, context);
+                if (GpuTypeSupport.isSupportedPointerType(scopeType)) {
+                    return new GpuIrUnary("*", lowerExpression(fieldAccessExpr.getScope(), scopes, context));
+                }
+                if (GpuTypeSupport.isSupportedScalarAliasType(scopeType)) {
+                    return lowerExpression(fieldAccessExpr.getScope(), scopes, context);
                 }
                 throw new IllegalArgumentException("The .value field is only supported on pointer helpers and unsigned scalar aliases for lowering: " + fieldAccessExpr);
             }
@@ -539,6 +612,9 @@ public final class GpuIrLowerer {
             }
             ConstantDescriptor constant = resolveConstant(fieldAccessExpr.getNameAsString(), nameExpr.getNameAsString(), context);
             if (constant != null) {
+                if (constant.constantData()) {
+                    return new GpuIrVariableRef(constant.name());
+                }
                 return new GpuIrLiteral(constant.sourceText());
             }
             throw new IllegalArgumentException("Unsupported field access for lowering: " + fieldAccessExpr);
@@ -694,6 +770,9 @@ public final class GpuIrLowerer {
         if (GpuTypeSupport.isPointerReferenceStorage(storageType)) {
             return new GpuIrVariableRef(nameExpr.getNameAsString());
         }
+        if (GpuTypeSupport.isArrayCompatibleWithPointerType(GpuTypeSupport.declaredType(storageType), expectedType)) {
+            return new GpuIrVariableRef(nameExpr.getNameAsString());
+        }
         if (GpuTypeSupport.isSupportedPointerType(GpuTypeSupport.declaredType(storageType))) {
             return new GpuIrUnary("&", new GpuIrVariableRef(nameExpr.getNameAsString()));
         }
@@ -785,17 +864,27 @@ public final class GpuIrLowerer {
         }
 
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr && "value".equals(fieldAccessExpr.getNameAsString())) {
-                String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
-                if (storageType == null) {
+            if ("value".equals(fieldAccessExpr.getNameAsString())) {
+                if (fieldAccessExpr.getScope() instanceof NameExpr nameExpr) {
+                    String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+                    if (storageType == null) {
+                        return null;
+                    }
+                    String declaredType = GpuTypeSupport.declaredType(storageType);
+                    if (GpuTypeSupport.isSupportedPointerType(declaredType)) {
+                        return GpuTypeSupport.pointerValueType(storageType);
+                    }
+                    if (GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
+                        return GpuTypeSupport.scalarAliasValueType(declaredType);
+                    }
                     return null;
                 }
-                String declaredType = GpuTypeSupport.declaredType(storageType);
-                if (GpuTypeSupport.isSupportedPointerType(declaredType)) {
-                    return GpuTypeSupport.pointerValueType(storageType);
+                String scopeType = inferExpressionType(fieldAccessExpr.getScope(), scopes, context);
+                if (GpuTypeSupport.isSupportedPointerType(scopeType)) {
+                    return GpuTypeSupport.pointerValueType(scopeType);
                 }
-                if (GpuTypeSupport.isSupportedScalarAliasType(declaredType)) {
-                    return GpuTypeSupport.scalarAliasValueType(declaredType);
+                if (GpuTypeSupport.isSupportedScalarAliasType(scopeType)) {
+                    return GpuTypeSupport.scalarAliasValueType(scopeType);
                 }
                 return null;
             }
@@ -877,6 +966,12 @@ public final class GpuIrLowerer {
             String receiverType = methodCallExpr.getScope()
                     .map(scope -> inferExpressionType(scope, scopes, context))
                     .orElse(null);
+            if (receiverType == null && methodCallExpr.getScope().isPresent() && methodCallExpr.getScope().orElseThrow() instanceof NameExpr nameExpr) {
+                String storageType = lookupStorageType(scopes, nameExpr.getNameAsString());
+                if (storageType != null) {
+                    receiverType = GpuTypeSupport.declaredType(storageType);
+                }
+            }
             if (intrinsicDatabase.isAllowedOwner(owner)) {
                 try {
                     return intrinsicDatabase.require(owner, methodCallExpr.getNameAsString(), inferArgumentTypes(methodCallExpr, scopes, context)).resultType();
@@ -958,7 +1053,31 @@ public final class GpuIrLowerer {
                         constant.ownerQualifiedName(),
                         constant.name(),
                         constant.javaType(),
-                        constant.sourceText()
+                        constant.sourceText(),
+                        null,
+                        false
+                ));
+            }
+            for (ParsedGpuConstantData constant : method.constantData()) {
+                List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+                boolean alreadyPresent = constants.stream().anyMatch(existing ->
+                        sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName())
+                                && existing.javaType().equals(constant.javaType())
+                                && existing.sourceText().equals(constant.initializerSource())
+                                && existing.constantDataKind() == constant.kind()
+                                && existing.constantData()
+                );
+                if (alreadyPresent) {
+                    continue;
+                }
+                constants.add(new ConstantDescriptor(
+                        constant.ownerSimpleName(),
+                        constant.ownerQualifiedName(),
+                        constant.name(),
+                        constant.javaType(),
+                        constant.initializerSource(),
+                        constant.kind(),
+                        true
                 ));
             }
         }
@@ -978,7 +1097,31 @@ public final class GpuIrLowerer {
                         constant.ownerQualifiedName(),
                         constant.name(),
                         constant.javaType(),
-                        constant.sourceText()
+                        constant.sourceText(),
+                        null,
+                        false
+                ));
+            }
+            for (ParsedGpuConstantData constant : struct.constantData()) {
+                List<ConstantDescriptor> constants = constantRegistry.computeIfAbsent(constant.name(), ignored -> new ArrayList<>());
+                boolean alreadyPresent = constants.stream().anyMatch(existing ->
+                        sameOwner(existing.ownerSimpleName(), existing.ownerQualifiedName(), constant.ownerSimpleName(), constant.ownerQualifiedName())
+                                && existing.javaType().equals(constant.javaType())
+                                && existing.sourceText().equals(constant.initializerSource())
+                                && existing.constantDataKind() == constant.kind()
+                                && existing.constantData()
+                );
+                if (alreadyPresent) {
+                    continue;
+                }
+                constants.add(new ConstantDescriptor(
+                        constant.ownerSimpleName(),
+                        constant.ownerQualifiedName(),
+                        constant.name(),
+                        constant.javaType(),
+                        constant.initializerSource(),
+                        constant.kind(),
+                        true
                 ));
             }
         }
@@ -997,7 +1140,9 @@ public final class GpuIrLowerer {
                     constant.ownerQualifiedName(),
                     constant.name(),
                     constant.javaType(),
-                    constant.sourceText()
+                    constant.sourceText(),
+                    null,
+                    false
             ));
         }
         return constantRegistry;
@@ -1206,6 +1351,9 @@ public final class GpuIrLowerer {
             return false;
         }
         for (int i = 0; i < argumentTypes.size(); i++) {
+            if (GpuTypeSupport.isArrayCompatibleWithPointerType(argumentTypes.get(i), parameterTypes.get(i))) {
+                continue;
+            }
             if (!GpuTypeSupport.isHelperArgumentCompatible(argumentTypes.get(i), parameterTypes.get(i))) {
                 return false;
             }
@@ -1233,6 +1381,9 @@ public final class GpuIrLowerer {
     private int helperCompatibilityScore(List<String> argumentTypes, List<String> parameterTypes) {
         int score = 0;
         for (int i = 0; i < argumentTypes.size(); i++) {
+            if (GpuTypeSupport.isArrayCompatibleWithPointerType(argumentTypes.get(i), parameterTypes.get(i))) {
+                continue;
+            }
             score += GpuTypeSupport.helperCompatibilityScore(argumentTypes.get(i), parameterTypes.get(i));
         }
         return score;
@@ -1414,7 +1565,9 @@ public final class GpuIrLowerer {
             String ownerQualifiedName,
             String name,
             String javaType,
-            String sourceText
+            String sourceText,
+            GpuConstantDataKind constantDataKind,
+            boolean constantData
     ) {
     }
 

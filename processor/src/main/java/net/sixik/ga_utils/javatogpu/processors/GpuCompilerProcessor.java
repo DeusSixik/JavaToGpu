@@ -12,7 +12,9 @@ import net.sixik.ga_utils.javatogpu.api.GpuBackendTarget;
 import net.sixik.ga_utils.javatogpu.frontend.GpuFrontendService;
 import net.sixik.ga_utils.javatogpu.frontend.GpuStructAliasRegistry;
 import net.sixik.ga_utils.javatogpu.frontend.intrinsics.GpuIntrinsicDatabase;
+import net.sixik.ga_utils.javatogpu.frontend.model.GpuConstantDataKind;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstant;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuStruct;
 import net.sixik.ga_utils.javatogpu.frontend.opencl.OpenClKernelNaming;
@@ -61,6 +63,8 @@ import java.util.stream.Collectors;
         "net.sixik.ga_utils.javatogpu.api.annotations.GPUIntrinsic",
         "net.sixik.ga_utils.javatogpu.api.annotations.GPUIntrinsicLibrary",
         "net.sixik.ga_utils.javatogpu.api.annotations.GPUConstant",
+        "net.sixik.ga_utils.javatogpu.api.annotations.GPUConstantData",
+        "net.sixik.ga_utils.javatogpu.api.annotations.GPUExternConstantData",
         "net.sixik.ga_utils.javatogpu.api.annotations.GPULocal",
         "net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct"
 })
@@ -87,6 +91,8 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
     private static final List<String> GPU_INTRINSIC_ANNOTATIONS = GpuAnnotationSupport.GPU_INTRINSIC_ANNOTATION_TYPES;
     private static final List<String> GPU_INTRINSIC_LIBRARY_ANNOTATIONS = GpuAnnotationSupport.GPU_INTRINSIC_LIBRARY_ANNOTATION_TYPES;
     private static final List<String> GPU_CONSTANT_ANNOTATIONS = GpuAnnotationSupport.GPU_CONSTANT_ANNOTATION_TYPES;
+    private static final List<String> GPU_CONSTANT_DATA_ANNOTATIONS = GpuAnnotationSupport.GPU_CONSTANT_DATA_ANNOTATION_TYPES;
+    private static final List<String> GPU_EXTERN_CONSTANT_DATA_ANNOTATIONS = GpuAnnotationSupport.GPU_EXTERN_CONSTANT_DATA_ANNOTATION_TYPES;
     private static final List<String> GPU_GLOBAL_ANNOTATIONS = GpuAnnotationSupport.GPU_GLOBAL_ANNOTATION_TYPES;
     private static final List<String> GPU_LOCAL_ANNOTATIONS = GpuAnnotationSupport.GPU_LOCAL_ANNOTATION_TYPES;
     private static final List<String> GPU_STRUCT_ANNOTATIONS = GpuAnnotationSupport.GPU_STRUCT_ANNOTATION_TYPES;
@@ -211,7 +217,8 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 extractMethodSource(method),
                 owner.getSimpleName().toString(),
                 owner.getQualifiedName().toString(),
-                collectConstants(owner)
+                collectConstants(owner),
+                collectConstantData(owner)
         );
     }
 
@@ -362,6 +369,43 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 .toList();
     }
 
+    private List<ParsedGpuConstantData> collectConstantData(TypeElement owner) {
+        List<ParsedGpuConstantData> constantData = new ArrayList<>();
+        for (Element element : owner.getEnclosedElements()) {
+            if (element.getKind() != ElementKind.FIELD) {
+                continue;
+            }
+            VariableElement field = (VariableElement) element;
+            boolean embedded = hasAnyAnnotation(field, GPU_CONSTANT_DATA_ANNOTATIONS);
+            boolean extern = hasAnyAnnotation(field, GPU_EXTERN_CONSTANT_DATA_ANNOTATIONS);
+            if (!embedded && !extern) {
+                continue;
+            }
+            if (embedded && extern) {
+                throw new IllegalArgumentException("Field cannot declare both @GPUConstantData and @GPUExternConstantData: " + field.getSimpleName());
+            }
+            if (!field.getModifiers().contains(Modifier.STATIC) || !field.getModifiers().contains(Modifier.FINAL)) {
+                throw new IllegalArgumentException((embedded ? "@GPUConstantData" : "@GPUExternConstantData") + " field must be static final: " + field.getSimpleName());
+            }
+            if (field.asType().getKind() != TypeKind.ARRAY) {
+                throw new IllegalArgumentException((embedded ? "@GPUConstantData" : "@GPUExternConstantData") + " requires an array type: " + field.asType());
+            }
+            String componentType = ((ArrayType) field.asType()).getComponentType().toString();
+            if (!GpuTypeSupport.isSupportedScalarType(componentType)) {
+                throw new IllegalArgumentException((embedded ? "@GPUConstantData" : "@GPUExternConstantData") + " currently supports only primitive scalar arrays: " + field.asType());
+            }
+            constantData.add(new ParsedGpuConstantData(
+                    owner.getSimpleName().toString(),
+                    owner.getQualifiedName().toString(),
+                    field.getSimpleName().toString(),
+                    field.asType().toString(),
+                    embedded ? extractConstantDataInitializer(field) : extractExternConstantDataInitializer(field),
+                    embedded ? GpuConstantDataKind.EMBEDDED : GpuConstantDataKind.EXTERN
+            ));
+        }
+        return constantData;
+    }
+
     private void writeHelperMetadata(RoundEnvironment roundEnv) throws IOException {
         Map<TypeElement, List<ExecutableElement>> helpersByOwner = elementsAnnotatedWithAny(roundEnv, CCODE_ANNOTATIONS).stream()
                 .filter(element -> element.getKind() == ElementKind.METHOD)
@@ -392,6 +436,16 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 properties.setProperty("constants." + i + ".name", constant.name());
                 properties.setProperty("constants." + i + ".javaType", constant.javaType());
                 properties.setProperty("constants." + i + ".sourceText", constant.sourceText());
+            }
+
+            List<ParsedGpuConstantData> constantData = collectConstantData(owner);
+            properties.setProperty("constantData.count", Integer.toString(constantData.size()));
+            for (int i = 0; i < constantData.size(); i++) {
+                ParsedGpuConstantData constant = constantData.get(i);
+                properties.setProperty("constantData." + i + ".name", constant.name());
+                properties.setProperty("constantData." + i + ".javaType", constant.javaType());
+                properties.setProperty("constantData." + i + ".initializerSource", constant.initializerSource());
+                properties.setProperty("constantData." + i + ".kind", constant.kind().name());
             }
 
             properties.setProperty("methods.count", Integer.toString(entry.getValue().size()));
@@ -437,6 +491,16 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 properties.setProperty("constants." + i + ".name", constant.name());
                 properties.setProperty("constants." + i + ".javaType", constant.javaType());
                 properties.setProperty("constants." + i + ".sourceText", constant.sourceText());
+            }
+
+            List<ParsedGpuConstantData> constantData = collectConstantData(owner);
+            properties.setProperty("constantData.count", Integer.toString(constantData.size()));
+            for (int i = 0; i < constantData.size(); i++) {
+                ParsedGpuConstantData constant = constantData.get(i);
+                properties.setProperty("constantData." + i + ".name", constant.name());
+                properties.setProperty("constantData." + i + ".javaType", constant.javaType());
+                properties.setProperty("constantData." + i + ".initializerSource", constant.initializerSource());
+                properties.setProperty("constantData." + i + ".kind", constant.kind().name());
             }
 
             properties.setProperty("methods.count", Integer.toString(entry.getValue().size()));
@@ -840,6 +904,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             String ownerSimpleName = properties.getProperty("ownerSimpleName", "");
             String ownerQualifiedName = properties.getProperty("ownerQualifiedName", ownerSimpleName);
             List<ParsedGpuConstant> constants = readConstants(properties, ownerSimpleName, ownerQualifiedName);
+            List<ParsedGpuConstantData> constantData = readConstantData(properties, ownerSimpleName, ownerQualifiedName);
             int methodCount = Integer.parseInt(properties.getProperty("methods.count", "0"));
             net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser parser =
                     new net.sixik.ga_utils.javatogpu.frontend.parser.GpuMethodParser();
@@ -848,7 +913,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 if (methodSource == null || methodSource.isBlank()) {
                     continue;
                 }
-                helpers.add(parser.parseMethod(methodSource, ownerSimpleName, ownerQualifiedName, constants));
+                helpers.add(parser.parseMethod(methodSource, ownerSimpleName, ownerQualifiedName, constants, constantData));
             }
         } catch (IOException exception) {
             return List.of();
@@ -871,6 +936,22 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         return constants;
     }
 
+    private List<ParsedGpuConstantData> readConstantData(Properties properties, String ownerSimpleName, String ownerQualifiedName) {
+        int constantCount = Integer.parseInt(properties.getProperty("constantData.count", "0"));
+        List<ParsedGpuConstantData> constantData = new ArrayList<>(constantCount);
+        for (int i = 0; i < constantCount; i++) {
+            constantData.add(new ParsedGpuConstantData(
+                    ownerSimpleName,
+                    ownerQualifiedName,
+                    properties.getProperty("constantData." + i + ".name"),
+                    properties.getProperty("constantData." + i + ".javaType"),
+                    properties.getProperty("constantData." + i + ".initializerSource"),
+                    GpuConstantDataKind.valueOf(properties.getProperty("constantData." + i + ".kind", GpuConstantDataKind.EMBEDDED.name()))
+            ));
+        }
+        return constantData;
+    }
+
     private Set<String> extractScopedHelperOwners(ParsedGpuMethod method) {
         return extractScopedMethodOwners(method);
     }
@@ -879,7 +960,13 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         return method.declaration().findAll(MethodCallExpr.class).stream()
                 .map(call -> call.getScope().map(Node::toString).orElse(""))
                 .filter(scope -> !scope.isBlank() && !"GPU".equals(scope))
+                .filter(this::looksLikeTypeOwnerReference)
                 .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    private boolean looksLikeTypeOwnerReference(String scope) {
+        String segment = lastScopeSegment(scope);
+        return !segment.isBlank() && Character.isUpperCase(segment.charAt(0));
     }
 
     private String lastScopeSegment(String scope) {
@@ -922,6 +1009,26 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
             return variableTree.getInitializer().toString();
         }
         return toConstantSource(field.asType().toString(), field.getConstantValue());
+    }
+
+    private String extractConstantDataInitializer(VariableElement field) {
+        TreePath path = trees.getPath(field);
+        if (path != null && path.getLeaf() instanceof VariableTree variableTree && variableTree.getInitializer() != null) {
+            return variableTree.getInitializer().toString();
+        }
+        throw new IllegalArgumentException("@GPUConstantData field must declare an inline initializer: " + field.getSimpleName());
+    }
+
+    private String extractExternConstantDataInitializer(VariableElement field) {
+        TreePath path = trees.getPath(field);
+        if (path != null && path.getLeaf() instanceof VariableTree variableTree && variableTree.getInitializer() != null) {
+            String initializer = variableTree.getInitializer().toString();
+            if (!"null".equals(initializer)) {
+                throw new IllegalArgumentException("@GPUExternConstantData field must declare a null initializer: " + field.getSimpleName());
+            }
+            return initializer;
+        }
+        throw new IllegalArgumentException("@GPUExternConstantData field must declare a null initializer: " + field.getSimpleName());
     }
 
     private String toConstantSource(String javaType, Object value) {

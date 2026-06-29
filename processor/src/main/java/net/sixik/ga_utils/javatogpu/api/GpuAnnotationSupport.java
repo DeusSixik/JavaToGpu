@@ -16,6 +16,8 @@ public final class GpuAnnotationSupport {
     public static final List<String> GPU_INTRINSIC_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUIntrinsic");
     public static final List<String> GPU_INTRINSIC_LIBRARY_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUIntrinsicLibrary");
     public static final List<String> GPU_CONSTANT_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUConstant");
+    public static final List<String> GPU_CONSTANT_DATA_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUConstantData");
+    public static final List<String> GPU_EXTERN_CONSTANT_DATA_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUExternConstantData");
     public static final List<String> GPU_GLOBAL_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUGlobal");
     public static final List<String> GPU_LOCAL_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPULocal");
     public static final List<String> GPU_STRUCT_ANNOTATION_TYPES = List.of(CANONICAL_PACKAGE + "GPUStruct");

@@ -1,6 +1,8 @@
 package net.sixik.ga_utils.javatogpu.frontend.parser;
 
 import net.sixik.ga_utils.javatogpu.frontend.model.GpuAddressSpace;
+import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuConstantData;
+import net.sixik.ga_utils.javatogpu.frontend.model.GpuConstantDataKind;
 import net.sixik.ga_utils.javatogpu.frontend.model.ParsedGpuMethod;
 import org.junit.jupiter.api.Test;
 
@@ -134,5 +136,31 @@ class GpuMethodParserTest {
         GpuMethodParser parser = new GpuMethodParser();
 
         assertThrows(IllegalArgumentException.class, () -> parser.parseMethod(methodSource));
+    }
+
+    @Test
+    void parsesEmbeddedGpuConstantDataFromOwner() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = input[id] * LOOKUP[id];
+                }
+                """;
+
+        GpuMethodParser parser = new GpuMethodParser();
+        ParsedGpuMethod method = parser.parseMethod(
+                methodSource,
+                "Demo",
+                "sample.Demo",
+                java.util.List.of(),
+                java.util.List.of(new ParsedGpuConstantData("Demo", "sample.Demo", "LOOKUP", "float[]", "{0.25f, 0.5f, 0.25f}", GpuConstantDataKind.EMBEDDED))
+        );
+
+        assertEquals(1, method.constantData().size());
+        assertEquals("LOOKUP", method.constantData().get(0).name());
+        assertEquals("float[]", method.constantData().get(0).javaType());
+        assertEquals("{0.25f, 0.5f, 0.25f}", method.constantData().get(0).initializerSource());
+        assertEquals(GpuConstantDataKind.EMBEDDED, method.constantData().get(0).kind());
     }
 }

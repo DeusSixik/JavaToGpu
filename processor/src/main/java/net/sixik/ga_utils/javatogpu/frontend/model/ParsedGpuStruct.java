@@ -7,6 +7,7 @@ public record ParsedGpuStruct(
         String ownerQualifiedName,
         List<ParsedGpuStructField> fields,
         List<ParsedGpuConstant> constants,
+        List<ParsedGpuConstantData> constantData,
         List<String> openClAttributes
 ) {
 }

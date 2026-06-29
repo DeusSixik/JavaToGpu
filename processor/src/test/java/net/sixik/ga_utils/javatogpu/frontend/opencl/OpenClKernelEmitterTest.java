@@ -505,4 +505,267 @@ class OpenClKernelEmitterTest {
                     }
                 }""", kernel);
     }
+
+    @Test
+    void emitsNanAndSaturatingConversionKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    short narrow = GPU.convert_short_sat(input[id] * 1000.0f);
+                    UShort wide = GPU.convert_ushort_sat(input[id] * 1000.0f);
+                    output[id] = GPU.nan(id) + narrow + wide.value;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* input, __global float* output) {
+                    int id = get_global_id(0);
+                    short narrow = convert_short_sat((input[id] * 1000.0f));
+                    ushort wide = convert_ushort_sat((input[id] * 1000.0f));
+                    output[id] = ((nan(((uint) (id))) + narrow) + wide);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsWideSaturatingConversionKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal double[] input, @GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    int signedValue = GPU.convert_int_sat(input[id]);
+                    UInt unsignedValue = GPU.convert_uint_sat(input[id]);
+                    long wideSigned = GPU.convert_long_sat(input[id]);
+                    ULong wideUnsigned = GPU.convert_ulong_sat(input[id]);
+                    output[id] = wideSigned + signedValue + unsignedValue.value + wideUnsigned.value;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global double* input, __global long* output) {
+                    int id = get_global_id(0);
+                    int signedValue = convert_int_sat(input[id]);
+                    uint unsignedValue = convert_uint_sat(input[id]);
+                    long wideSigned = convert_long_sat(input[id]);
+                    ulong wideUnsigned = convert_ulong_sat(input[id]);
+                    output[id] = (((wideSigned + signedValue) + unsignedValue) + wideUnsigned);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsRegularNarrowConversionKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal double[] input, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    byte a = GPU.convert_char(input[id]);
+                    UByte b = GPU.convert_uchar(input[id]);
+                    short c = GPU.convert_short(input[id]);
+                    UShort d = GPU.convert_ushort(input[id]);
+                    output[id] = a + b.value + c + d.value;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global double* input, __global int* output) {
+                    int id = get_global_id(0);
+                    char a = convert_char(input[id]);
+                    uchar b = convert_uchar(input[id]);
+                    short c = convert_short(input[id]);
+                    ushort d = convert_ushort(input[id]);
+                    output[id] = (((a + b) + c) + d);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsUnsignedAliasConversionKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    UByte a = new UByte((byte) 7);
+                    UShort b = new UShort((short) 9);
+                    UInt c = new UInt(11);
+                    ULong d = new ULong(13L);
+                    UInt c2 = GPU.convert_uint(a);
+                    ULong d2 = GPU.convert_ulong(b);
+                    output[id] = GPU.convert_int(c) + GPU.convert_int(d) + GPU.convert_long(c2) + GPU.convert_long(d2) + GPU.convert_int(GPU.convert_float(b)) + GPU.convert_int(GPU.convert_double(a));
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global long* output) {
+                    int id = get_global_id(0);
+                    uchar a = ((uchar) ((char) 7));
+                    ushort b = ((ushort) ((short) 9));
+                    uint c = ((uint) 11);
+                    ulong d = ((ulong) 13L);
+                    uint c2 = ((uint) (a));
+                    ulong d2 = ((ulong) (b));
+                    output[id] = (((((convert_int(c) + convert_int(d)) + convert_long(c2)) + convert_long(d2)) + convert_int(convert_float(b))) + convert_int(convert_double(a)));
+                }""", kernel);
+    }
+
+    @Test
+    void emitsAdditionalIntegerCommonKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] input, @GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    int a = GPU.hadd(input[id], 3);
+                    int b = GPU.mul_hi(input[id], 5);
+                    long c = GPU.rhadd((long) input[id], 7L);
+                    long d = GPU.mad_hi((long) input[id], 9L, 11L);
+                    output[id] = a + b + c + d;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* input, __global long* output) {
+                    int id = get_global_id(0);
+                    int a = hadd(input[id], 3);
+                    int b = mul_hi(input[id], 5);
+                    long c = rhadd(((long) input[id]), 7L);
+                    long d = mad_hi(((long) input[id]), 9L, 11L);
+                    output[id] = (((a + b) + c) + d);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsSaturatingArithmeticKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] input, @GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    int a = GPU.add_sat(input[id], 100);
+                    int b = GPU.mad_sat(input[id], 3, 7);
+                    long c = GPU.sub_sat((long) input[id], 9L);
+                    output[id] = a + b + c;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* input, __global long* output) {
+                    int id = get_global_id(0);
+                    int a = add_sat(input[id], 100);
+                    int b = mad_sat(input[id], 3, 7);
+                    long c = sub_sat(((long) input[id]), 9L);
+                    output[id] = ((a + b) + c);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsUnsignedSaturatingArithmeticKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    UByte a = new UByte((byte) 10);
+                    UShort b = new UShort((short) 20);
+                    UInt c = new UInt(30);
+                    ULong d = new ULong(40L);
+                    UByte x = GPU.add_sat(a, new UByte((byte) 11));
+                    UShort y = GPU.mad_sat(b, new UShort((short) 2), new UShort((short) 3));
+                    UInt z = GPU.sub_sat(c, new UInt(5));
+                    ULong w = GPU.add_sat(d, new ULong(6L));
+                    output[id] = x.value + y.value + z.value + w.value;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global long* output) {
+                    int id = get_global_id(0);
+                    uchar a = ((uchar) ((char) 10));
+                    ushort b = ((ushort) ((short) 20));
+                    uint c = ((uint) 30);
+                    ulong d = ((ulong) 40L);
+                    uchar x = add_sat(a, ((uchar) ((char) 11)));
+                    ushort y = mad_sat(b, ((ushort) ((short) 2)), ((ushort) ((short) 3)));
+                    uint z = sub_sat(c, ((uint) 5));
+                    ulong w = add_sat(d, ((ulong) 6L));
+                    output[id] = (((x + y) + z) + w);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsMulSatKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] input, @GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    int a = GPU.mul_sat(input[id], 13);
+                    UInt b = GPU.mul_sat(new UInt(7), new UInt(8));
+                    output[id] = a + b.value;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* input, __global long* output) {
+                    int id = get_global_id(0);
+                    int a = mul_sat(input[id], 13);
+                    uint b = mul_sat(((uint) 7), ((uint) 8));
+                    output[id] = (a + b);
+                }""", kernel);
+    }
+
+    @Test
+    void emitsUnsignedAbsDiffKernel() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    UByte a = GPU.abs_diff(new UByte((byte) 10), new UByte((byte) 3));
+                    UShort b = GPU.abs_diff(new UShort((short) 20), new UShort((short) 4));
+                    UInt c = GPU.abs_diff(new UInt(30), new UInt(5));
+                    ULong d = GPU.abs_diff(new ULong(40L), new ULong(6L));
+                    output[id] = a.value + b.value + c.value + d.value;
+                }
+                """;
+
+        ParsedGpuMethod method = new GpuMethodParser().parseMethod(methodSource);
+        GpuIrMethod irMethod = new GpuIrLowerer(GpuIntrinsicDatabase.createDefault()).lower(method);
+        String kernel = new OpenClKernelEmitter().emit(method, irMethod);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global long* output) {
+                    int id = get_global_id(0);
+                    uchar a = abs_diff(((uchar) ((char) 10)), ((uchar) ((char) 3)));
+                    ushort b = abs_diff(((ushort) ((short) 20)), ((ushort) ((short) 4)));
+                    uint c = abs_diff(((uint) 30), ((uint) 5));
+                    ulong d = abs_diff(((ulong) 40L), ((ulong) 6L));
+                    output[id] = (((a + b) + c) + d);
+                }""", kernel);
+    }
 }

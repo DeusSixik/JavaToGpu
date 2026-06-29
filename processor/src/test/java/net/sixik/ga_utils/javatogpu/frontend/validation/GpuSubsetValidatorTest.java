@@ -752,6 +752,216 @@ class GpuSubsetValidatorTest {
     }
 
     @Test
+    void acceptsGlobalArrayPassedToAddressSpacePointerHelper() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = Helpers.read(input, id);
+                }
+                """;
+        String helperSource = """
+                @CCode
+                float read(GlobalFloatPtr ptr, int index) {
+                    return ptr.value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(kernelSource, "Demo", "sample.Demo"),
+                java.util.List.of(parser.parseMethod(helperSource, "Helpers", "sample.Helpers")),
+                java.util.List.of()
+        ));
+    }
+
+    @Test
+    void acceptsAddressSpacePointerAddExpression() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = Helpers.readOffset(input, id);
+                }
+                """;
+        String helperSource = """
+                @CCode
+                float readOffset(GlobalFloatPtr ptr, int index) {
+                    return ptr.add(index).value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(kernelSource, "Demo", "sample.Demo"),
+                java.util.List.of(parser.parseMethod(helperSource, "Helpers", "sample.Helpers")),
+                java.util.List.of()
+        ));
+    }
+
+    @Test
+    void acceptsAddressSpacePointerSubExpression() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    output[id] = Helpers.readBack(input, id);
+                }
+                """;
+        String helperSource = """
+                @CCode
+                float readBack(GlobalFloatPtr ptr, int index) {
+                    return ptr.add(index + 1).sub(1).value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(kernelSource, "Demo", "sample.Demo"),
+                java.util.List.of(parser.parseMethod(helperSource, "Helpers", "sample.Helpers")),
+                java.util.List.of()
+        ));
+    }
+
+    @Test
+    void acceptsLocalTypedPointerViewVariableFromArray() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    GlobalFloatPtr ptr = input;
+                    output[id] = ptr.add(id).value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsReinterpretedGlobalByteView() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal byte[] blob, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    GlobalBytePtr ptr = blob;
+                    output[id] = ptr.add(id * 4).asIntPtr().value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsReinterpretedConstantByteView() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUConstant byte[] blob, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    ConstantBytePtr ptr = blob;
+                    output[id] = ptr.add(id * 4).asIntPtr().value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsReinterpretedLocalByteView() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPULocal byte[] blob, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    LocalBytePtr ptr = blob;
+                    output[id] = ptr.add(id * 4).asIntPtr().value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsReinterpretedGlobalByteViewAsChar() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal byte[] blob, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    GlobalBytePtr ptr = blob;
+                    output[id] = ptr.add(id * 2).asCharPtr().value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsReinterpretedConstantByteViewAsShort() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUConstant byte[] blob, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    ConstantBytePtr ptr = blob;
+                    output[id] = ptr.add(id * 2).asShortPtr().value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsReinterpretedLocalByteViewAsLong() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPULocal byte[] blob, @GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    LocalBytePtr ptr = blob;
+                    output[id] = ptr.add(id * 8).asLongPtr().value;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsPrivateFixedSizeScalarArray() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                    float[] scratch = new float[8];
+                    int id = GPU.get_global_id(0);
+                    scratch[id] = input[id] * 2.0f;
+                    output[id] = scratch[id];
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validate(parser.parseMethod(kernelSource, "Demo", "sample.Demo")));
+    }
+
+    @Test
+    void acceptsPackedBlobOffsetViewPattern() {
+        String kernelSource = """
+                @GPU
+                void kernel(@GPUGlobal byte[] blob, PackedNoiseView view, @GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    GlobalBytePtr root = blob;
+                    int sampler = root.add(view.samplerOffset + id * 4).asIntPtr().value;
+                    int density = root.add(view.densityOffset + id * 4).asIntPtr().value;
+                    output[id] = sampler + density;
+                }
+                """;
+        String structSource = """
+                @GPUStruct
+                class PackedNoiseView {
+                    int samplerOffset;
+                    int densityOffset;
+                }
+                """;
+
+        assertDoesNotThrow(() -> validator.validateKernel(
+                parser.parseMethod(kernelSource, "Demo", "sample.Demo"),
+                java.util.List.of(),
+                java.util.List.of(new net.sixik.ga_utils.javatogpu.frontend.parser.GpuStructParser()
+                        .parseStruct(structSource, "PackedNoiseView", "sample.PackedNoiseView"))
+        ));
+    }
+
+    @Test
     void rejectsStructOnlyOpenClAttributeOnKernelMethod() {
         String methodSource = """
                 @OpenCLAttributes({"packed"})

@@ -348,6 +348,22 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         return createWriteOnlyRgbaFloatImageMipmappedInternal(width, height, mipLevels);
     }
 
+    public final Image2DMipmappedReadOnly createReadOnlyRgba8ImageMipmapped(int width, int height, int mipLevels, byte[] rgba) {
+        return createReadOnlyRgba8ImageMipmappedInternal(width, height, mipLevels, rgba);
+    }
+
+    public final Image2DMipmappedWriteOnly createWriteOnlyRgba8ImageMipmapped(int width, int height, int mipLevels) {
+        return createWriteOnlyRgba8ImageMipmappedInternal(width, height, mipLevels);
+    }
+
+    public final Image2DMipmappedReadOnly createReadOnlyRgbaIntImageMipmapped(int width, int height, int mipLevels, int[] rgba) {
+        return createReadOnlyRgbaIntImageMipmappedInternal(width, height, mipLevels, rgba);
+    }
+
+    public final Image2DMipmappedWriteOnly createWriteOnlyRgbaIntImageMipmapped(int width, int height, int mipLevels) {
+        return createWriteOnlyRgbaIntImageMipmappedInternal(width, height, mipLevels);
+    }
+
     public final Image2DMipmappedReadOnly createReadOnlyRgbaUIntImageMipmapped(int width, int height, int mipLevels, int[] rgba) {
         return createReadOnlyRgbaUIntImageMipmappedInternal(width, height, mipLevels, rgba);
     }
@@ -570,6 +586,22 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     public final float[] readRgbaFloatImageMipmapped(Image2DMipmappedWriteOnly image, int mipLevel) {
         return readRgbaFloatImageMipmappedInternal(image, mipLevel);
+    }
+
+    public final byte[] readRgba8ImageMipmapped(Image2DMipmappedReadOnly image, int mipLevel) {
+        return readRgba8ImageMipmappedInternal(image, mipLevel);
+    }
+
+    public final byte[] readRgba8ImageMipmapped(Image2DMipmappedWriteOnly image, int mipLevel) {
+        return readRgba8ImageMipmappedInternal(image, mipLevel);
+    }
+
+    public final int[] readRgbaIntImageMipmapped(Image2DMipmappedReadOnly image, int mipLevel) {
+        return readRgbaIntImageMipmappedInternal(image, mipLevel);
+    }
+
+    public final int[] readRgbaIntImageMipmapped(Image2DMipmappedWriteOnly image, int mipLevel) {
+        return readRgbaIntImageMipmappedInternal(image, mipLevel);
     }
 
     public final int[] readRgbaUIntImageMipmapped(Image2DMipmappedReadOnly image, int mipLevel) {
@@ -893,6 +925,22 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         return session().createWriteOnlyRgbaFloatImageMipmapped(width, height, mipLevels);
     }
 
+    protected Image2DMipmappedReadOnly createReadOnlyRgba8ImageMipmappedInternal(int width, int height, int mipLevels, byte[] rgba) {
+        return session().createReadOnlyRgba8ImageMipmapped(width, height, mipLevels, rgba);
+    }
+
+    protected Image2DMipmappedWriteOnly createWriteOnlyRgba8ImageMipmappedInternal(int width, int height, int mipLevels) {
+        return session().createWriteOnlyRgba8ImageMipmapped(width, height, mipLevels);
+    }
+
+    protected Image2DMipmappedReadOnly createReadOnlyRgbaIntImageMipmappedInternal(int width, int height, int mipLevels, int[] rgba) {
+        return session().createReadOnlyRgbaIntImageMipmapped(width, height, mipLevels, rgba);
+    }
+
+    protected Image2DMipmappedWriteOnly createWriteOnlyRgbaIntImageMipmappedInternal(int width, int height, int mipLevels) {
+        return session().createWriteOnlyRgbaIntImageMipmapped(width, height, mipLevels);
+    }
+
     protected Image2DMipmappedReadOnly createReadOnlyRgbaUIntImageMipmappedInternal(int width, int height, int mipLevels, int[] rgba) {
         return session().createReadOnlyRgbaUIntImageMipmapped(width, height, mipLevels, rgba);
     }
@@ -1115,6 +1163,22 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
 
     protected float[] readRgbaFloatImageMipmappedInternal(Image2DMipmappedWriteOnly image, int mipLevel) {
         return session().readRgbaFloatImageMipmapped(image, mipLevel);
+    }
+
+    protected byte[] readRgba8ImageMipmappedInternal(Image2DMipmappedReadOnly image, int mipLevel) {
+        return session().readRgba8ImageMipmapped(image, mipLevel);
+    }
+
+    protected byte[] readRgba8ImageMipmappedInternal(Image2DMipmappedWriteOnly image, int mipLevel) {
+        return session().readRgba8ImageMipmapped(image, mipLevel);
+    }
+
+    protected int[] readRgbaIntImageMipmappedInternal(Image2DMipmappedReadOnly image, int mipLevel) {
+        return session().readRgbaIntImageMipmapped(image, mipLevel);
+    }
+
+    protected int[] readRgbaIntImageMipmappedInternal(Image2DMipmappedWriteOnly image, int mipLevel) {
+        return session().readRgbaIntImageMipmapped(image, mipLevel);
     }
 
     protected int[] readRgbaUIntImageMipmappedInternal(Image2DMipmappedReadOnly image, int mipLevel) {

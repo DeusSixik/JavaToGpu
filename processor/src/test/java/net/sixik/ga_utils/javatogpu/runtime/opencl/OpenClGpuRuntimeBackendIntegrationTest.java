@@ -19,6 +19,10 @@ import net.sixik.ga_utils.javatogpu.api.Sampler;
 import net.sixik.ga_utils.javatogpu.api.UInt;
 import net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.api.annotations.OpenCLAttributes;
+import net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessor;
+import net.sixik.ga_utils.javatogpu.runtime.GpuGeneratedLauncherInvoker;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeScope;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelInvocation;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterAccess;
@@ -26,9 +30,156 @@ import net.sixik.ga_utils.javatogpu.runtime.GpuKernelParameterDescriptor;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import javax.tools.JavaCompiler;
+import javax.tools.JavaFileObject;
+import javax.tools.SimpleJavaFileObject;
+import javax.tools.StandardJavaFileManager;
+import javax.tools.ToolProvider;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenClGpuRuntimeBackendIntegrationTest {
+
+    @Test
+    void runsGeneratedLauncherHelperPipelineOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+
+        CompiledGpuSource compiled = compileGpuSource(
+                "sample.HelperPipeline",
+                """
+                        package sample;
+
+                        import net.sixik.ga_utils.javatogpu.api.GPU;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.CCode;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUGlobal;
+
+                        public class HelperPipeline {
+                            @net.sixik.ga_utils.javatogpu.api.annotations.GPU
+                            public static void kernel(@GPUGlobal float[] input, @GPUGlobal float[] output) {
+                                int id = GPU.get_global_id(0);
+                                output[id] = Helpers.square(input[id]) + 1.0f;
+                            }
+                        }
+
+                        class Helpers {
+                            @CCode(inline = true)
+                            static float square(float value) {
+                                return value * value;
+                            }
+                        }
+                        """
+        );
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{compiled.classOutputDir().toUri().toURL()}, getClass().getClassLoader());
+             GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+            Class<?> ownerClass = Class.forName("sample.HelperPipeline", true, classLoader);
+            float[] input = new float[]{1.0f, 2.0f, 3.0f, 4.0f};
+            float[] output = new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+
+            GpuGeneratedLauncherInvoker.invoke(ownerClass, "kernel", input, output);
+
+            assertArrayEquals(new float[]{2.0f, 5.0f, 10.0f, 17.0f}, output);
+        }
+    }
+
+    @Test
+    void runsGeneratedLauncherStructPipelineOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+
+        CompiledGpuSource compiled = compileGpuSource(
+                "sample.StructPipeline",
+                """
+                        package sample;
+
+                        import net.sixik.ga_utils.javatogpu.api.GPU;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUGlobal;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct;
+
+                        public class StructPipeline {
+                            @net.sixik.ga_utils.javatogpu.api.annotations.GPU
+                            public static void kernel(@GPUGlobal Sample[] input, @GPUGlobal float[] output) {
+                                int id = GPU.get_global_id(0);
+                                output[id] = input[id].x + input[id].y + input[id].count;
+                            }
+
+                            @GPUStruct
+                            public static final class Sample {
+                                public float x;
+                                public float y;
+                                public int count;
+
+                                public Sample() {
+                                }
+
+                                public Sample(float x, float y, int count) {
+                                    this.x = x;
+                                    this.y = y;
+                                    this.count = count;
+                                }
+                            }
+                        }
+                        """
+        );
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{compiled.classOutputDir().toUri().toURL()}, getClass().getClassLoader());
+             GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+            Class<?> ownerClass = Class.forName("sample.StructPipeline", true, classLoader);
+            Class<?> sampleClass = Class.forName("sample.StructPipeline$Sample", true, classLoader);
+
+            Object sample0 = sampleClass.getConstructor(float.class, float.class, int.class).newInstance(1.0f, 2.0f, 3);
+            Object sample1 = sampleClass.getConstructor(float.class, float.class, int.class).newInstance(4.0f, 5.0f, 6);
+            Object input = java.lang.reflect.Array.newInstance(sampleClass, 2);
+            java.lang.reflect.Array.set(input, 0, sample0);
+            java.lang.reflect.Array.set(input, 1, sample1);
+            float[] output = new float[]{0.0f, 0.0f};
+
+            GpuGeneratedLauncherInvoker.invoke(ownerClass, "kernel", input, output);
+
+            assertArrayEquals(new float[]{6.0f, 15.0f}, output);
+        }
+    }
+
+    @Test
+    void runsGeneratedLauncherVectorPipelineOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+
+        CompiledGpuSource compiled = compileGpuSource(
+                "sample.VectorPipeline",
+                """
+                        package sample;
+
+                        import net.sixik.ga_utils.javatogpu.api.Float2;
+                        import net.sixik.ga_utils.javatogpu.api.GPU;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUGlobal;
+
+                        public class VectorPipeline {
+                            @net.sixik.ga_utils.javatogpu.api.annotations.GPU
+                            public static void kernel(Float2 bias, @GPUGlobal float[] output) {
+                                int id = GPU.get_global_id(0);
+                                output[id] = bias.x + bias.y + id;
+                            }
+                        }
+                        """
+        );
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{compiled.classOutputDir().toUri().toURL()}, getClass().getClassLoader());
+             GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+            Class<?> ownerClass = Class.forName("sample.VectorPipeline", true, classLoader);
+            float[] output = new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+
+            GpuGeneratedLauncherInvoker.invoke(ownerClass, "kernel", new Float2(1.5f, 2.0f), output);
+
+            assertArrayEquals(new float[]{3.5f, 4.5f, 5.5f, 6.5f}, output);
+        }
+    }
 
     @Test
     void runsSimpleKernelOnAvailableOpenClDevice() {
@@ -457,6 +608,54 @@ class OpenClGpuRuntimeBackendIntegrationTest {
              Image2DMipmappedReadOnly inputImage = backend.createReadOnlyRgbaFloatImageMipmapped(4, 2, 2, source)) {
             assertArrayEquals(java.util.Arrays.copyOfRange(source, 0, 32), backend.readRgbaFloatImageMipmapped(inputImage, 0));
             assertArrayEquals(java.util.Arrays.copyOfRange(source, 32, 40), backend.readRgbaFloatImageMipmapped(inputImage, 1));
+        }
+    }
+
+    @Test
+    void roundTripsMipmappedRgba8ImagesOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        byte[] source = new byte[]{
+                1, 2, 3, 4,
+                5, 6, 7, 8,
+                9, 10, 11, 12,
+                13, 14, 15, 16,
+                17, 18, 19, 20,
+                21, 22, 23, 24,
+                25, 26, 27, 28,
+                29, 30, 31, 32,
+                33, 34, 35, 36,
+                37, 38, 39, 40
+        };
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend();
+             Image2DMipmappedReadOnly inputImage = backend.createReadOnlyRgba8ImageMipmapped(4, 2, 2, source)) {
+            assertArrayEquals(java.util.Arrays.copyOfRange(source, 0, 32), backend.readRgba8ImageMipmapped(inputImage, 0));
+            assertArrayEquals(java.util.Arrays.copyOfRange(source, 32, 40), backend.readRgba8ImageMipmapped(inputImage, 1));
+        }
+    }
+
+    @Test
+    void roundTripsMipmappedRgbaIntImagesOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        int[] source = new int[]{
+                -1, -2, -3, -4,
+                -5, -6, -7, -8,
+                -9, -10, -11, -12,
+                -13, -14, -15, -16,
+                17, 18, 19, 20,
+                21, 22, 23, 24,
+                25, 26, 27, 28,
+                29, 30, 31, 32,
+                -33, -34, -35, -36,
+                -37, -38, -39, -40
+        };
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend();
+             Image2DMipmappedReadOnly inputImage = backend.createReadOnlyRgbaIntImageMipmapped(4, 2, 2, source)) {
+            assertArrayEquals(java.util.Arrays.copyOfRange(source, 0, 32), backend.readRgbaIntImageMipmapped(inputImage, 0));
+            assertArrayEquals(java.util.Arrays.copyOfRange(source, 32, 40), backend.readRgbaIntImageMipmapped(inputImage, 1));
         }
     }
 
@@ -1377,6 +1576,55 @@ class OpenClGpuRuntimeBackendIntegrationTest {
             // Compilation succeeded, so the runtime test can proceed.
         } catch (UnsatisfiedLinkError | IllegalStateException | OpenClException exception) {
             Assumptions.assumeTrue(false, messagePrefix + ": " + exception.getMessage());
+        }
+    }
+
+    private static CompiledGpuSource compileGpuSource(String className, String source) throws IOException {
+        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        if (compiler == null) {
+            throw new IllegalStateException("JDK compiler is not available in the current test runtime");
+        }
+
+        Path classOutputDir = Files.createTempDirectory("javatogpu-runtime-pipeline-classes");
+        Path generatedOutputDir = Files.createTempDirectory("javatogpu-runtime-pipeline-generated");
+
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
+            List<String> options = List.of(
+                    "-classpath", System.getProperty("java.class.path"),
+                    "-d", classOutputDir.toString(),
+                    "-s", generatedOutputDir.toString()
+            );
+            JavaFileObject sourceFile = new StringJavaFileObject(className, source);
+            JavaCompiler.CompilationTask task = compiler.getTask(
+                    null,
+                    fileManager,
+                    null,
+                    options,
+                    null,
+                    List.of(sourceFile)
+            );
+            task.setProcessors(List.of(new GpuCompilerProcessor()));
+
+            assertTrue(task.call());
+        }
+
+        return new CompiledGpuSource(classOutputDir, generatedOutputDir);
+    }
+
+    private record CompiledGpuSource(Path classOutputDir, Path generatedOutputDir) {
+    }
+
+    private static final class StringJavaFileObject extends SimpleJavaFileObject {
+        private final String source;
+
+        private StringJavaFileObject(String className, String source) {
+            super(URI.create("string:///" + className.replace('.', '/') + JavaFileObject.Kind.SOURCE.extension), JavaFileObject.Kind.SOURCE);
+            this.source = source;
+        }
+
+        @Override
+        public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+            return source;
         }
     }
 }

@@ -1228,6 +1228,60 @@ class OpenClGpuRuntimeBackendTest {
     }
 
     @Test
+    void createsHighLevelMipmappedRgba8ImageThroughProtectedHook() {
+        AtomicReference<byte[]> captured = new AtomicReference<>();
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected Image2DMipmappedReadOnly createReadOnlyRgba8ImageMipmappedInternal(int width, int height, int mipLevels, byte[] rgba) {
+                assertEquals(4, width);
+                assertEquals(2, height);
+                assertEquals(2, mipLevels);
+                captured.set(rgba);
+                return Image2DMipmappedReadOnly.borrowed(10127L, width, height, mipLevels);
+            }
+        };
+
+        Image2DMipmappedReadOnly image = backend.createReadOnlyRgba8ImageMipmapped(4, 2, 2, new byte[]{
+                1, 2, 3, 4, 5, 6, 7, 8,
+                9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32,
+                33, 34, 35, 36, 37, 38, 39, 40
+        });
+
+        assertEquals(10127L, image.handle());
+        assertEquals(40, captured.get().length);
+    }
+
+    @Test
+    void createsHighLevelMipmappedIntImageThroughProtectedHook() {
+        AtomicReference<int[]> captured = new AtomicReference<>();
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected Image2DMipmappedReadOnly createReadOnlyRgbaIntImageMipmappedInternal(int width, int height, int mipLevels, int[] rgba) {
+                assertEquals(4, width);
+                assertEquals(2, height);
+                assertEquals(2, mipLevels);
+                captured.set(rgba);
+                return Image2DMipmappedReadOnly.borrowed(10125L, width, height, mipLevels);
+            }
+        };
+
+        Image2DMipmappedReadOnly image = backend.createReadOnlyRgbaIntImageMipmapped(4, 2, 2, new int[]{
+                1, 2, 3, 4, 5, 6, 7, 8,
+                9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32,
+                -1, -2, -3, -4, -5, -6, -7, -8
+        });
+
+        assertEquals(10125L, image.handle());
+        assertEquals(40, captured.get().length);
+    }
+
+    @Test
     void createsHighLevelMipmappedUIntImageThroughProtectedHook() {
         AtomicReference<int[]> captured = new AtomicReference<>();
 
@@ -1559,6 +1613,40 @@ class OpenClGpuRuntimeBackendTest {
         float[] rgba = backend.readRgbaFloatImageMipmapped(Image2DMipmappedWriteOnly.borrowed(10123L, 4, 2, 2), 1);
 
         assertArrayEquals(new float[]{1.0f, 2.0f, 3.0f, 4.0f}, rgba);
+    }
+
+    @Test
+    void readsHighLevelMipmappedRgba8ImageThroughProtectedHook() {
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected byte[] readRgba8ImageMipmappedInternal(Image2DMipmappedWriteOnly image, int mipLevel) {
+                assertEquals(10128L, image.handle());
+                assertEquals(2, image.mipLevels());
+                assertEquals(1, mipLevel);
+                return new byte[]{9, 10, 11, 12};
+            }
+        };
+
+        byte[] rgba = backend.readRgba8ImageMipmapped(Image2DMipmappedWriteOnly.borrowed(10128L, 4, 2, 2), 1);
+
+        assertArrayEquals(new byte[]{9, 10, 11, 12}, rgba);
+    }
+
+    @Test
+    void readsHighLevelMipmappedIntImageThroughProtectedHook() {
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected int[] readRgbaIntImageMipmappedInternal(Image2DMipmappedWriteOnly image, int mipLevel) {
+                assertEquals(10126L, image.handle());
+                assertEquals(2, image.mipLevels());
+                assertEquals(1, mipLevel);
+                return new int[]{-9, -10, -11, -12};
+            }
+        };
+
+        int[] rgba = backend.readRgbaIntImageMipmapped(Image2DMipmappedWriteOnly.borrowed(10126L, 4, 2, 2), 1);
+
+        assertArrayEquals(new int[]{-9, -10, -11, -12}, rgba);
     }
 
     @Test

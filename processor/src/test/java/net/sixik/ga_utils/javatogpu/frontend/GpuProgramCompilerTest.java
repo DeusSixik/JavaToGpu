@@ -141,6 +141,7 @@ class GpuProgramCompilerTest {
                 returnType,
                 parameters,
                 List.of(),
+                List.of(),
                 null,
                 false,
                 List.of(),

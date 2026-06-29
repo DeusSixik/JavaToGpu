@@ -1,6 +1,7 @@
 package net.sixik.ga_utils.javatogpu.types;
 
 import net.sixik.ga_utils.javatogpu.api.GpuAnnotationSupport;
+import net.sixik.ga_utils.javatogpu.api.annotations.GPUPointerAddressSpace;
 import net.sixik.ga_utils.javatogpu.api.annotations.GPUPointerType;
 import net.sixik.ga_utils.javatogpu.api.annotations.GPUScalarAliasType;
 import net.sixik.ga_utils.javatogpu.api.annotations.GPUVectorType;
@@ -63,7 +64,7 @@ public final class GpuTypeSupport {
             throw new IllegalArgumentException("Type is not annotated with @GPUPointerType: " + pointerType.getName());
         }
 
-        PointerDescriptor descriptor = new PointerDescriptor(annotation.valueType());
+        PointerDescriptor descriptor = new PointerDescriptor(annotation.valueType(), annotation.addressSpace().name());
         registerPointerAlias(pointerType.getSimpleName(), descriptor);
         registerPointerAlias(pointerType.getName(), descriptor);
     }
@@ -342,6 +343,33 @@ public final class GpuTypeSupport {
         return descriptor.valueType();
     }
 
+    public static String pointerAddressSpace(String javaType) {
+        PointerDescriptor descriptor = pointerDescriptor(javaType);
+        if (descriptor == null) {
+            throw new IllegalArgumentException("Unsupported pointer type: " + javaType);
+        }
+        return descriptor.addressSpace();
+    }
+
+    public static boolean isAddressSpacePointerType(String javaType) {
+        return isSupportedPointerType(javaType)
+                && !GPUPointerAddressSpace.PRIVATE.name().equals(pointerAddressSpace(javaType));
+    }
+
+    public static boolean isArrayCompatibleWithPointerType(String actualType, String pointerType) {
+        if (!isArrayType(actualType) || !isSupportedPointerType(pointerType)) {
+            return false;
+        }
+        String componentType = componentType(declaredType(actualType));
+        if (!pointerValueType(pointerType).equals(componentType)) {
+            return false;
+        }
+        return switch (pointerAddressSpace(pointerType)) {
+            case "GLOBAL", "CONSTANT", "LOCAL" -> true;
+            default -> false;
+        };
+    }
+
     public static String parameterStorageType(String javaType) {
         return isSupportedPointerType(javaType) ? declaredType(javaType) + POINTER_REFERENCE_SUFFIX : javaType;
     }
@@ -569,7 +597,7 @@ public final class GpuTypeSupport {
     ) {
     }
 
-    private record PointerDescriptor(String valueType) {
+    private record PointerDescriptor(String valueType, String addressSpace) {
     }
 
     private record ScalarAliasDescriptor(

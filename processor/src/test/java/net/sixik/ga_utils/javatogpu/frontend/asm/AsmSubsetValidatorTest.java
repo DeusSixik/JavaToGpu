@@ -180,7 +180,7 @@ class AsmSubsetValidatorTest {
 
         assertTrue(exception.getMessage().contains("Unsupported method invocation kind"));
         assertTrue(exception.getMessage().contains("INVOKEVIRTUAL"));
-        assertTrue(exception.getMessage().contains("gpu-friendly-asm-contract.md"));
+        assertTrue(exception.getMessage().contains("ASM-Contract.md"));
     }
 
     @Test

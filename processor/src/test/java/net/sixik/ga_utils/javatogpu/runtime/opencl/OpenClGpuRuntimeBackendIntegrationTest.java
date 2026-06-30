@@ -43,6 +43,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Random;
 import java.util.List;
 
@@ -50,6 +51,11 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OpenClGpuRuntimeBackendIntegrationTest {
+
+    private static final String LONG_RUNNING_PROPERTY = "javatogpu.opencl.longRunning";
+    private static final String LONG_RUNNING_SUMMARY_FILE_PROPERTY = "javatogpu.opencl.longRunningSummaryFile";
+    private static final String WORKLOAD_VALIDATION_PROPERTY = "javatogpu.opencl.workloadValidation";
+    private static final String WORKLOAD_SUMMARY_FILE_PROPERTY = "javatogpu.opencl.workloadSummaryFile";
 
     @Test
     void runsGeneratedLauncherHelperPipelineOnAvailableOpenClDevice() throws Exception {
@@ -747,6 +753,241 @@ class OpenClGpuRuntimeBackendIntegrationTest {
     }
 
     @Test
+    void comparesGeneratedLauncherPackedNumericWorkloadAgainstCpuReferenceOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+        assumeOpenClFp64Available("Skipping packed numeric workload integration test: no fp64 support");
+
+        CompiledGpuSource compiled = compileGpuSource(
+                "sample.PackedNumericWorkload",
+                """
+                        package sample;
+
+                        import net.sixik.ga_utils.javatogpu.api.GPU;
+                        import net.sixik.ga_utils.javatogpu.api.GlobalBytePtr;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.CCode;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUGlobal;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct;
+
+                        import java.nio.ByteBuffer;
+                        import java.nio.ByteOrder;
+
+                        public class PackedNumericWorkload {
+                            @net.sixik.ga_utils.javatogpu.api.annotations.GPU
+                            public static void kernel(@GPUGlobal byte[] blob, PackedNumericView view, @GPUGlobal double[] output) {
+                                int id = GPU.get_global_id(0);
+                                GlobalBytePtr root = GPU.global(blob);
+                                double sampler = root.add(view.samplerOffset + id * 8).asDoublePtr().value;
+                                double density = root.add(view.densityOffset + id * 8).asDoublePtr().value;
+                                int octave = root.add(view.octaveOffset + id * 4).asIntPtr().value;
+                                double bias = root.add(view.biasOffset).asDoublePtr().value;
+                                output[id] = NumericMath.mix(sampler, density, octave, bias);
+                            }
+
+                            public static double cpuMix(double sampler, double density, int octave, double bias) {
+                                return (sampler * 0.75) + (density * 1.25) + octave * bias;
+                            }
+
+                            public static void cpuKernel(byte[] blob, PackedNumericView view, double[] output) {
+                                ByteBuffer buffer = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
+                                for (int id = 0; id < output.length; id++) {
+                                    double sampler = buffer.getDouble(view.samplerOffset + id * 8);
+                                    double density = buffer.getDouble(view.densityOffset + id * 8);
+                                    int octave = buffer.getInt(view.octaveOffset + id * 4);
+                                    double bias = buffer.getDouble(view.biasOffset);
+                                    output[id] = cpuMix(sampler, density, octave, bias);
+                                }
+                            }
+
+                            @GPUStruct
+                            public static class PackedNumericView {
+                                public int samplerOffset;
+                                public int densityOffset;
+                                public int octaveOffset;
+                                public int biasOffset;
+
+                                public PackedNumericView() {
+                                }
+
+                                public PackedNumericView(int samplerOffset, int densityOffset, int octaveOffset, int biasOffset) {
+                                    this.samplerOffset = samplerOffset;
+                                    this.densityOffset = densityOffset;
+                                    this.octaveOffset = octaveOffset;
+                                    this.biasOffset = biasOffset;
+                                }
+                            }
+
+                            public static final class NumericMath {
+                                private NumericMath() {
+                                }
+
+                                @CCode(inline = true)
+                                public static double mix(double sampler, double density, int octave, double bias) {
+                                    return (sampler * 0.75) + (density * 1.25) + octave * bias;
+                                }
+                            }
+
+                            public static final class Fixture {
+                                public final byte[] blob;
+                                public final PackedNumericView view;
+
+                                public Fixture(byte[] blob, PackedNumericView view) {
+                                    this.blob = blob;
+                                    this.view = view;
+                                }
+                            }
+
+                            public static Fixture createFixture() {
+                                double[] samplerValues = new double[]{1.5, 2.5, 3.5, 4.5, 5.5, 6.5};
+                                double[] densityValues = new double[]{0.25, 0.5, 0.75, 1.0, 1.25, 1.5};
+                                int[] octaveValues = new int[]{1, 2, 3, 4, 5, 6};
+                                double bias = 0.125;
+
+                                int samplerOffset = 0;
+                                int densityOffset = samplerValues.length * 8;
+                                int octaveOffset = densityOffset + densityValues.length * 8;
+                                int biasOffset = octaveOffset + octaveValues.length * 4;
+                                byte[] blob = new byte[biasOffset + 8];
+                                ByteBuffer buffer = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
+
+                                for (int i = 0; i < samplerValues.length; i++) {
+                                    buffer.putDouble(samplerOffset + i * 8, samplerValues[i]);
+                                    buffer.putDouble(densityOffset + i * 8, densityValues[i]);
+                                    buffer.putInt(octaveOffset + i * 4, octaveValues[i]);
+                                }
+                                buffer.putDouble(biasOffset, bias);
+                                return new Fixture(blob, new PackedNumericView(samplerOffset, densityOffset, octaveOffset, biasOffset));
+                            }
+                        }
+                        """
+        );
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{compiled.classOutputDir().toUri().toURL()}, getClass().getClassLoader());
+             GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+            Class<?> ownerClass = Class.forName("sample.PackedNumericWorkload", true, classLoader);
+            Class<?> fixtureClass = Class.forName("sample.PackedNumericWorkload$Fixture", true, classLoader);
+
+            Object fixture = ownerClass.getMethod("createFixture").invoke(null);
+            byte[] blob = (byte[]) fixtureClass.getField("blob").get(fixture);
+            Object view = fixtureClass.getField("view").get(fixture);
+
+            double[] cpuOutput = new double[6];
+            double[] gpuOutput = new double[6];
+
+            ownerClass.getMethod("cpuKernel", byte[].class, view.getClass(), double[].class)
+                    .invoke(null, blob, view, cpuOutput);
+
+            GpuGeneratedLauncherInvoker.invokeWithGlobalWorkSize(ownerClass, "kernel", 6L, blob, view, gpuOutput);
+
+            for (int i = 0; i < cpuOutput.length; i++) {
+                org.junit.jupiter.api.Assertions.assertEquals(cpuOutput[i], gpuOutput[i], 1.0e-9, "Mismatch at index " + i);
+            }
+        }
+    }
+
+    @Test
+    void comparesImageSamplerWorkloadAgainstCpuReferenceOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+
+        int[] expectedSums = new int[]{10, 26};
+        float[] expectedWritten = new float[]{
+                1.0f, 0.5f, 0.25f, 1.0f,
+                1.0f, 0.5f, 0.25f, 1.0f
+        };
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "gpu_image_entry",
+                "inline://integration/image-kernel.cl",
+                """
+                        __kernel void gpu_image_entry(read_only image2d_t inputImage, write_only image2d_t outputImage, sampler_t sampler, __global int* output) {
+                            int id = get_global_id(0);
+                            int2 coords = (int2)(id, 0);
+                            int4 pixel = read_imagei(inputImage, sampler, coords);
+                            output[id] = pixel.x + pixel.y + pixel.z + pixel.w;
+                            write_imagef(outputImage, coords, (float4)(1.0f, 0.5f, 0.25f, 1.0f));
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("inputImage", "Image2DReadOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("outputImage", "Image2DWriteOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("sampler", "Sampler", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(descriptor, "Skipping image workload integration test");
+
+        int[] gpuOutput = new int[]{0, 0};
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend();
+             Image2DReadOnly inputImage = backend.createReadOnlyRgbaIntImage(
+                     2,
+                     1,
+                     new int[]{1, 2, 3, 4, 5, 6, 7, 8}
+             );
+             Image2DWriteOnly outputImage = backend.createWriteOnlyRgbaFloatImage(2, 1);
+             Sampler sampler = backend.createNearestClampToEdgeSampler()) {
+            backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{inputImage, outputImage, sampler, gpuOutput}));
+            float[] gpuWritten = backend.readRgbaFloatImage(outputImage);
+
+            assertArrayEquals(expectedSums, gpuOutput);
+            assertArrayEquals(expectedWritten, gpuWritten);
+        }
+    }
+
+    @Test
+    void seriousWorkloadBucketRemainsEquivalentOnAvailableOpenClDevice() throws Exception {
+        assumeWorkloadValidationEnabled();
+        assumeOpenClAvailable();
+
+        String perlinStatus = "not run";
+        String packedBlobStatus = "not run";
+        String packedNumericStatus = "not run";
+        String imageStatus = "not run";
+
+        try {
+            runPerlinWorkloadComparison();
+            perlinStatus = "passed";
+        } catch (org.opentest4j.TestAbortedException aborted) {
+            perlinStatus = "skipped";
+        }
+
+        try {
+            runPackedBlobWorkloadComparison();
+            packedBlobStatus = "passed";
+        } catch (org.opentest4j.TestAbortedException aborted) {
+            packedBlobStatus = "skipped";
+        }
+
+        try {
+            runPackedNumericWorkloadComparison();
+            packedNumericStatus = "passed";
+        } catch (org.opentest4j.TestAbortedException aborted) {
+            packedNumericStatus = "skipped";
+        }
+
+        try {
+            runImageWorkloadComparison();
+            imageStatus = "passed";
+        } catch (org.opentest4j.TestAbortedException aborted) {
+            imageStatus = "skipped";
+        }
+
+        String overallStatus = ("passed".equals(perlinStatus) || "skipped".equals(perlinStatus))
+                && ("passed".equals(packedBlobStatus) || "skipped".equals(packedBlobStatus))
+                && ("passed".equals(packedNumericStatus) || "skipped".equals(packedNumericStatus))
+                && ("passed".equals(imageStatus) || "skipped".equals(imageStatus))
+                ? "passed"
+                : "failed";
+        writeWorkloadSummary(new OpenClWorkloadValidationSummary(
+                Instant.now(),
+                overallStatus,
+                perlinStatus,
+                packedBlobStatus,
+                packedNumericStatus,
+                imageStatus
+        ));
+        assertTrue(!"failed".equals(overallStatus));
+    }
+
+    @Test
     void runsSimpleKernelOnAvailableOpenClDevice() {
         assumeOpenClAvailable();
 
@@ -1259,6 +1500,153 @@ class OpenClGpuRuntimeBackendIntegrationTest {
                     assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[4], written[5], written[6], written[7]});
                 }
             }
+        }
+    }
+
+    @Test
+    void longRunningMixedAbiAndImageInvocationsRemainStableOnAvailableOpenClDevice() {
+        assumeLongRunningOpenClValidationEnabled();
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor scalarDescriptor = new GpuKernelDescriptor(
+                "gpu_scalar_repeat_entry",
+                "inline://integration/scalar-repeat-kernel.cl",
+                """
+                        __kernel void gpu_scalar_repeat_entry(__global const float* input, float scale, __global float* output) {
+                            int id = get_global_id(0);
+                            output[id] = input[id] + scale;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "float[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("scale", "float", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        GpuKernelDescriptor structDescriptor = new GpuKernelDescriptor(
+                "gpu_struct_repeat_entry",
+                "inline://integration/struct-repeat-kernel.cl",
+                """
+                        typedef struct{
+                            float x;
+                            float y;
+                        } StructArraySample;
+
+                        __kernel void gpu_struct_repeat_entry(__global StructArraySample* input, __global StructArraySample* output) {
+                            int id = get_global_id(0);
+                            output[id].x = input[id].x + 1.0f;
+                            output[id].y = input[id].y + 2.0f;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "sample.StructArraySample[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "sample.StructArraySample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        GpuKernelDescriptor vectorDescriptor = new GpuKernelDescriptor(
+                "gpu_vector_array_repeat_entry",
+                "inline://integration/vector-array-repeat-kernel.cl",
+                """
+                        __kernel void gpu_vector_array_repeat_entry(__global float2* input, __global float2* output) {
+                            int id = get_global_id(0);
+                            output[id].x = input[id].x + 1.0f;
+                            output[id].y = input[id].y + 2.0f;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "net.sixik.ga_utils.javatogpu.api.Float2[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "net.sixik.ga_utils.javatogpu.api.Float2[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        GpuKernelDescriptor imageDescriptor = new GpuKernelDescriptor(
+                "gpu_image_repeat_entry",
+                "inline://integration/image-repeat-kernel.cl",
+                """
+                        __kernel void gpu_image_repeat_entry(read_only image2d_t inputImage, write_only image2d_t outputImage, sampler_t sampler, __global int* output) {
+                            int id = get_global_id(0);
+                            int2 coords = (int2)(id, 0);
+                            int4 pixel = read_imagei(inputImage, sampler, coords);
+                            output[id] = pixel.x + pixel.y + pixel.z + pixel.w;
+                            write_imagef(outputImage, coords, (float4)(1.0f, 0.5f, 0.25f, 1.0f));
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("inputImage", "Image2DReadOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("outputImage", "Image2DWriteOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("sampler", "Sampler", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        assumeKernelCompiles(scalarDescriptor, "Skipping long-running mixed OpenCL stability test");
+        assumeKernelCompiles(structDescriptor, "Skipping long-running mixed OpenCL stability test");
+        assumeKernelCompiles(vectorDescriptor, "Skipping long-running mixed OpenCL stability test");
+        assumeKernelCompiles(imageDescriptor, "Skipping long-running mixed OpenCL stability test");
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend();
+             Sampler sampler = backend.createNearestClampToEdgeSampler()) {
+            final int iterations = 150;
+            for (int iteration = 0; iteration < iterations; iteration++) {
+                float[] scalarInput = new float[]{1.0f + iteration, 2.0f + iteration, 3.0f + iteration, 4.0f + iteration};
+                float[] scalarOutput = new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+                backend.invoke(new GpuKernelInvocation(scalarDescriptor, new Object[]{scalarInput, 2.5f, scalarOutput}));
+                assertArrayEquals(
+                        new float[]{3.5f + iteration, 4.5f + iteration, 5.5f + iteration, 6.5f + iteration},
+                        scalarOutput
+                );
+
+                StructArraySample[] structInput = new StructArraySample[]{
+                        new StructArraySample(1.0f + iteration, 2.0f + iteration),
+                        new StructArraySample(3.0f + iteration, 4.0f + iteration)
+                };
+                StructArraySample[] structOutput = new StructArraySample[]{new StructArraySample(), new StructArraySample()};
+                backend.invoke(new GpuKernelInvocation(structDescriptor, new Object[]{structInput, structOutput}));
+                assertArrayEquals(
+                        new float[]{2.0f + iteration, 4.0f + iteration},
+                        new float[]{structOutput[0].x, structOutput[1].x}
+                );
+                assertArrayEquals(
+                        new float[]{4.0f + iteration, 6.0f + iteration},
+                        new float[]{structOutput[0].y, structOutput[1].y}
+                );
+
+                Float2[] vectorInput = new Float2[]{
+                        new Float2(1.0f + iteration, 2.0f + iteration),
+                        new Float2(3.0f + iteration, 4.0f + iteration)
+                };
+                Float2[] vectorOutput = new Float2[]{new Float2(), new Float2()};
+                backend.invoke(new GpuKernelInvocation(vectorDescriptor, new Object[]{vectorInput, vectorOutput}));
+                assertArrayEquals(
+                        new float[]{2.0f + iteration, 4.0f + iteration},
+                        new float[]{vectorOutput[0].x, vectorOutput[1].x}
+                );
+                assertArrayEquals(
+                        new float[]{4.0f + iteration, 6.0f + iteration},
+                        new float[]{vectorOutput[0].y, vectorOutput[1].y}
+                );
+
+                int[] imageOutput = new int[]{0, 0};
+                try (Image2DReadOnly inputImage = backend.createReadOnlyRgbaIntImage(
+                        2,
+                        1,
+                        new int[]{1 + iteration, 2, 3, 4, 5 + iteration, 6, 7, 8}
+                );
+                     Image2DWriteOnly outputImage = backend.createWriteOnlyRgbaFloatImage(2, 1)) {
+                    backend.invoke(new GpuKernelInvocation(imageDescriptor, new Object[]{inputImage, outputImage, sampler, imageOutput}));
+                    assertArrayEquals(new int[]{10 + iteration, 26 + iteration}, imageOutput);
+
+                    float[] written = backend.readRgbaFloatImage(outputImage);
+                    assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[0], written[1], written[2], written[3]});
+                    assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[4], written[5], written[6], written[7]});
+                }
+            }
+
+            OpenClRuntimeStatistics statistics = backend.statistics();
+            assertTrue(statistics.invocationCount() >= 600L);
+            assertTrue(statistics.compileCount() >= 4L);
+            assertTrue(statistics.compileCacheHitCount() > statistics.compileCount());
+            writeLongRunningSummary(new OpenClLongRunningValidationSummary(
+                    Instant.now(),
+                    "passed",
+                    iterations,
+                    statistics
+            ));
         }
     }
 
@@ -2294,6 +2682,60 @@ class OpenClGpuRuntimeBackendIntegrationTest {
         } catch (UnsatisfiedLinkError | IllegalStateException exception) {
             Assumptions.assumeTrue(false, "Skipping OpenCL integration smoke test: " + exception.getMessage());
         }
+    }
+
+    private static void assumeLongRunningOpenClValidationEnabled() {
+        Assumptions.assumeTrue(
+                Boolean.getBoolean(LONG_RUNNING_PROPERTY),
+                "Skipping long-running OpenCL stability test: set -D" + LONG_RUNNING_PROPERTY + "=true"
+        );
+    }
+
+    private static void assumeWorkloadValidationEnabled() {
+        Assumptions.assumeTrue(
+                Boolean.getBoolean(WORKLOAD_VALIDATION_PROPERTY),
+                "Skipping workload validation test: set -D" + WORKLOAD_VALIDATION_PROPERTY + "=true"
+        );
+    }
+
+    private static void writeLongRunningSummary(OpenClLongRunningValidationSummary summary) {
+        String outputPath = System.getProperty(LONG_RUNNING_SUMMARY_FILE_PROPERTY);
+        if (outputPath == null || outputPath.isBlank()) {
+            return;
+        }
+        try {
+            OpenClLongRunningValidationSummaryIO.write(Path.of(outputPath), summary);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to write long-running OpenCL validation summary", exception);
+        }
+    }
+
+    private static void writeWorkloadSummary(OpenClWorkloadValidationSummary summary) {
+        String outputPath = System.getProperty(WORKLOAD_SUMMARY_FILE_PROPERTY);
+        if (outputPath == null || outputPath.isBlank()) {
+            return;
+        }
+        try {
+            OpenClWorkloadValidationSummaryIO.write(Path.of(outputPath), summary);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to write OpenCL workload validation summary", exception);
+        }
+    }
+
+    private void runPerlinWorkloadComparison() throws Exception {
+        comparesGeneratedLauncherPerlinWorkloadAgainstCpuReferenceOnAvailableOpenClDevice();
+    }
+
+    private void runPackedBlobWorkloadComparison() throws Exception {
+        comparesGeneratedLauncherPackedBlobWorkloadAgainstCpuReferenceOnAvailableOpenClDevice();
+    }
+
+    private void runPackedNumericWorkloadComparison() throws Exception {
+        comparesGeneratedLauncherPackedNumericWorkloadAgainstCpuReferenceOnAvailableOpenClDevice();
+    }
+
+    private void runImageWorkloadComparison() throws Exception {
+        comparesImageSamplerWorkloadAgainstCpuReferenceOnAvailableOpenClDevice();
     }
 
     private static void assumeOpenClFp64Available(String messagePrefix) {

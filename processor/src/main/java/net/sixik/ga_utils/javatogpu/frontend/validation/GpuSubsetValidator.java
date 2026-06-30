@@ -2106,13 +2106,13 @@ public final class GpuSubsetValidator {
     private String unsupportedStatementMessage(Statement statement) {
         return "Unsupported statement in @GPU method: "
                 + statement.getClass().getSimpleName()
-                + "; use the supported Java GPU subset from docs/supported-subset-contract.md or flatten the statement into if/loops/assignments";
+                + "; use the supported Java GPU subset from docs/Language-Contract.md or flatten the statement into if/loops/assignments";
     }
 
     private String unsupportedExpressionMessage(Expression expression) {
         return "Unsupported expression in @GPU method: "
                 + expression
-                + "; rewrite it into the supported Java GPU subset from docs/supported-subset-contract.md, helper calls, or explicit temporaries";
+                + "; rewrite it into the supported Java GPU subset from docs/Language-Contract.md, helper calls, or explicit temporaries";
     }
 
     private record ValidationContext(

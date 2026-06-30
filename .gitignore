@@ -42,7 +42,8 @@ bin/
 ### Mac OS ###
 .DS_Store
 /.idea
-/docs
+/docs-project-plan
 *.args
 /github-wiki
 /.metadata/
+/custom_data_m

@@ -199,14 +199,14 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             compiledKernel = kernelCache.computeIfAbsent(invocation.descriptor(), this::compileKernelChecked);
         }
         OpenClPreparedExecution execution = executionPreparer.prepare(compiledKernel, plan);
-        if (invocation.globalWorkSize() != null) {
+        if (invocation.executionConfig() != null) {
             execution = new OpenClPreparedExecution(
                     execution.compiledKernel(),
                     execution.bufferBindings(),
                     execution.localBindings(),
                     execution.scalarBindings(),
                     execution.argumentBindings(),
-                    invocation.globalWorkSize()
+                    invocation.executionConfig()
             );
         }
         executeKernelChecked(execution);
@@ -789,7 +789,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
             bindScalarArgument(execution.compiledKernel(), binding.parameterIndex(), binding.scalarBinding());
         }
 
-        enqueueKernel(execution.compiledKernel(), resolveGlobalWorkSize(execution));
+        enqueueKernel(execution.compiledKernel(), resolveExecutionConfig(execution));
 
         for (OpenClPreparedBufferBinding binding : execution.bufferBindings()) {
             if (binding.binding().readbackRequired()) {
@@ -1385,7 +1385,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                         + binding.sourceArray().getClass().getName()
                         + "; use supported primitive arrays, vector arrays, struct arrays, or image/sampler wrappers"
                         + "; for packed structs use @GPUStruct[] and for vectors use wrapper arrays like Float2[] or UInt8[]"
-                        + "; see docs/gpu-diagnostics-guide.md"
+                        + "; see docs/Troubleshooting.md"
         );
     }
 
@@ -1434,8 +1434,25 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         }
     }
 
-    protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
-        long event = compiledKernel.kernel().enqueue1D(session().queue(), globalWorkSize, null);
+    protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
+        long event;
+        if (executionConfig.dimensions() == 2) {
+            event = compiledKernel.kernel().enqueue2D(
+                    session().queue(),
+                    executionConfig.globalX(),
+                    executionConfig.globalY(),
+                    executionConfig.localX(),
+                    executionConfig.localY(),
+                    null
+            );
+        } else {
+            event = compiledKernel.kernel().enqueue1D(
+                    session().queue(),
+                    executionConfig.globalX(),
+                    executionConfig.localX(),
+                    null
+            );
+        }
         try {
             OpenClEvents.waitFor(event);
         } finally {
@@ -1509,7 +1526,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                         + binding.sourceArray().getClass().getName()
                         + "; use supported primitive arrays, vector arrays, struct arrays, or image wrappers"
                         + "; for packed structs use @GPUStruct[] and for vectors use wrapper arrays like Float2[] or UInt8[]"
-                        + "; see docs/gpu-diagnostics-guide.md"
+                        + "; see docs/Troubleshooting.md"
         );
     }
 
@@ -1630,15 +1647,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
     }
 
     private void validateInvocationPreconditions(GpuKernelInvocation invocation, OpenClExecutionPlan plan) {
-        if (invocation.globalWorkSize() != null) {
-            if (invocation.globalWorkSize() <= 0L) {
-                throw new IllegalArgumentException(
-                        "Explicit global work size must be positive for kernel "
-                                + invocation.descriptor().kernelName()
-                                + ": "
-                                + invocation.globalWorkSize()
-                );
-            }
+        if (invocation.executionConfig() != null) {
             return;
         }
         resolvePlannedGlobalWorkSize(invocation.descriptor().kernelName(), plan.bufferBindings());
@@ -1767,19 +1776,21 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         return false;
     }
 
-    private long resolveGlobalWorkSize(OpenClPreparedExecution execution) {
-        if (execution.explicitGlobalWorkSize() != null) {
-            return execution.explicitGlobalWorkSize();
+    private net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig resolveExecutionConfig(OpenClPreparedExecution execution) {
+        if (execution.explicitExecutionConfig() != null) {
+            return execution.explicitExecutionConfig();
         }
-        return resolveGlobalWorkSize(execution.compiledKernel().descriptor().kernelName(), execution.bufferBindings());
+        return net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig.oneDimensional(
+                resolveGlobalWorkSize(execution.compiledKernel().descriptor().kernelName(), execution.bufferBindings())
+        );
     }
 
     private long resolvePlannedGlobalWorkSize(String kernelName, java.util.List<OpenClBufferBinding> bufferBindings) {
         if (bufferBindings.isEmpty()) {
             throw new UnsupportedOperationException(
-                    "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
-                            + kernelName
-                            + "; add at least one array/vector/struct buffer parameter because explicit work-size configuration is not exposed here yet"
+                            "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
+                                    + kernelName
+                                    + "; add at least one array/vector/struct buffer parameter or launch with an explicit GpuExecutionConfig"
             );
         }
 
@@ -1804,9 +1815,9 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
     private long resolveGlobalWorkSize(String kernelName, java.util.List<OpenClPreparedBufferBinding> bufferBindings) {
         if (bufferBindings.isEmpty()) {
             throw new UnsupportedOperationException(
-                    "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
-                            + kernelName
-                            + "; add at least one array/vector/struct buffer parameter because explicit work-size configuration is not exposed here yet"
+                            "OpenCL execution requires at least one buffer argument to derive global work size for kernel "
+                                    + kernelName
+                                    + "; add at least one array/vector/struct buffer parameter or launch with an explicit GpuExecutionConfig"
             );
         }
 

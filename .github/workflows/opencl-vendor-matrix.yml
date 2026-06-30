@@ -32,29 +32,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Compile-only suite
-        run: ./gradlew.bat :processor:compileOnlyTest --console=plain
+      - name: Vendor validation suite
+        run: ./gradlew.bat :processor:openClVendorValidation --console=plain
 
-      - name: Runtime OpenCL suite
-        run: ./gradlew.bat :processor:runtimeOpenClTest --console=plain
-
-      - name: Image suite
-        run: ./gradlew.bat :processor:imageOpenClTest --console=plain
-
-      - name: Struct ABI suite
-        run: ./gradlew.bat :processor:structAbiTest --console=plain
-
-      - name: Atomics suite
-        run: ./gradlew.bat :processor:atomicsCompileTest --console=plain
-
-      - name: Local memory suite
-        run: ./gradlew.bat :processor:localMemoryTest --console=plain
-
-      - name: Performance and stress suite
-        run: ./gradlew.bat :processor:performanceStressTest --console=plain
-
-      - name: Optional integration smoke
+      - name: Integration smoke
         run: ./gradlew.bat :processor:integrationOpenClSmokeTest --console=plain
+
+      - name: Serious workload validation
+        run: ./gradlew.bat :processor:openClWorkloadValidationTest --console=plain
+
+      - name: Long-running stability validation
+        run: ./gradlew.bat :processor:openClLongRunningStabilityTest --console=plain
+
+      - name: Benchmark companion
+        run: ./gradlew.bat :processor:benchmarkTest --console=plain
 
       - name: Generate validation report
         if: always()
@@ -62,10 +53,10 @@ jobs:
         env:
           JTG_VALIDATION_VENDOR: ${{ matrix.vendor }}
 
-      - name: Upload validation report
+      - name: Upload OpenCL report bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: opencl-validation-${{ matrix.vendor }}
-          path: processor/build/reports/opencl/validation-report.md
+          path: processor/build/reports/opencl/
           if-no-files-found: warn

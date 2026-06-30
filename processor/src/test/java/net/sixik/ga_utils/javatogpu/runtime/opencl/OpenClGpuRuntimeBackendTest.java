@@ -100,7 +100,7 @@ class OpenClGpuRuntimeBackendTest {
         assertTrue(exception.getMessage().contains(
                 "OpenCL execution requires at least one buffer argument to derive global work size for kernel kernel"
         ));
-        assertTrue(exception.getMessage().contains("explicit work-size configuration is not exposed here yet"));
+        assertTrue(exception.getMessage().contains("launch with an explicit GpuExecutionConfig"));
         assertEquals(0, backend.cacheSize());
     }
 
@@ -113,7 +113,7 @@ class OpenClGpuRuntimeBackendTest {
                 java.util.List.of()
         );
 
-        AtomicReference<Long> executedGlobalSize = new AtomicReference<>();
+        AtomicReference<net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig> executedConfig = new AtomicReference<>();
         OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
             @Override
             protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
@@ -121,14 +121,14 @@ class OpenClGpuRuntimeBackendTest {
             }
 
             @Override
-            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
-                executedGlobalSize.set(globalWorkSize);
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
+                executedConfig.set(executionConfig);
             }
         };
 
         backend.invoke(new GpuKernelInvocation(descriptor, new Object[0], 8L));
 
-        assertEquals(8L, executedGlobalSize.get());
+        assertEquals(8L, executedConfig.get().globalWorkSize());
     }
 
     @Test
@@ -143,7 +143,7 @@ class OpenClGpuRuntimeBackendTest {
                 )
         );
 
-        AtomicReference<Long> executedGlobalSize = new AtomicReference<>();
+        AtomicReference<net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig> executedConfig = new AtomicReference<>();
         OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
             @Override
             protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
@@ -168,14 +168,14 @@ class OpenClGpuRuntimeBackendTest {
             }
 
             @Override
-            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
-                executedGlobalSize.set(globalWorkSize);
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
+                executedConfig.set(executionConfig);
             }
         };
 
         backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new byte[64], new int[8]}, 8L));
 
-        assertEquals(8L, executedGlobalSize.get());
+        assertEquals(8L, executedConfig.get().globalWorkSize());
     }
 
     @Test
@@ -199,7 +199,42 @@ class OpenClGpuRuntimeBackendTest {
                 () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[0], 0L))
         );
 
-        assertTrue(exception.getMessage().contains("Explicit global work size must be positive for kernel kernel: 0"));
+        assertTrue(exception.getMessage().contains("globalX must be positive: 0"));
+    }
+
+    @Test
+    void explicitTwoDimensionalExecutionConfigReachesKernelEnqueuePath() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of()
+        );
+
+        AtomicReference<net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig> executedConfig = new AtomicReference<>();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+
+            @Override
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
+                executedConfig.set(executionConfig);
+            }
+        };
+
+        backend.invoke(new GpuKernelInvocation(
+                descriptor,
+                new Object[0],
+                net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig.twoDimensional(16L, 8L, 4L, 2L)
+        ));
+
+        assertEquals(2, executedConfig.get().dimensions());
+        assertEquals(16L, executedConfig.get().globalX());
+        assertEquals(8L, executedConfig.get().globalY());
+        assertEquals(4L, executedConfig.get().localX());
+        assertEquals(2L, executedConfig.get().localY());
     }
 
     @Test
@@ -255,14 +290,14 @@ class OpenClGpuRuntimeBackendTest {
             }
 
             @Override
-            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
                 float[] in = (float[]) boundBuffers.get(0);
                 float scale = (Float) boundScalars.get(1);
                 float[] out = (float[]) boundBuffers.get(2);
-                for (int i = 0; i < globalWorkSize; i++) {
+                for (int i = 0; i < executionConfig.globalWorkSize(); i++) {
                     out[i] = in[i] + scale;
                 }
-                events.add("enqueue:" + globalWorkSize);
+                events.add("enqueue:" + executionConfig.globalWorkSize());
             }
 
             @Override
@@ -333,7 +368,7 @@ class OpenClGpuRuntimeBackendTest {
             }
 
             @Override
-            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
                 executeCalls.incrementAndGet();
             }
 
@@ -619,7 +654,7 @@ class OpenClGpuRuntimeBackendTest {
                 "OpenCL kernel build failed for kernel kernel on device Fake GPU [javatogpu/sample/Demo/kernel.cl]: driver build log: unknown type name 'half16'"
         ));
         assertTrue(exception.getMessage().contains("enable ABI debug"));
-        assertTrue(exception.getMessage().contains("opencl-known-device-quirks.md"));
+        assertTrue(exception.getMessage().contains("Device-Quirks.md"));
     }
 
     @Test
@@ -720,7 +755,7 @@ class OpenClGpuRuntimeBackendTest {
             }
 
             @Override
-            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
                 // no-op
             }
 
@@ -816,7 +851,7 @@ class OpenClGpuRuntimeBackendTest {
                 }
 
                 @Override
-                protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+                protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
                     // no-op
                 }
 

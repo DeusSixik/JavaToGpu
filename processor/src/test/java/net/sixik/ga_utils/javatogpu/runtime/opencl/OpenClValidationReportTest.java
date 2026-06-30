@@ -40,6 +40,95 @@ class OpenClValidationReportTest {
     }
 
     @Test
+    void longRunningSummaryRoundTripsThroughPropertiesFormat() throws Exception {
+        java.nio.file.Path summaryFile = java.nio.file.Files.createTempFile("javatogpu-opencl-long-running", ".properties");
+        OpenClLongRunningValidationSummary summary = new OpenClLongRunningValidationSummary(
+                Instant.parse("2026-07-01T12:00:00Z"),
+                "passed",
+                150,
+                new OpenClRuntimeStatistics(600, 4, 596, 1, 600)
+        );
+
+        OpenClLongRunningValidationSummaryIO.write(summaryFile, summary);
+        OpenClLongRunningValidationSummary loaded = OpenClLongRunningValidationSummaryIO.readIfExists(summaryFile).orElseThrow();
+
+        assertEquals(summary, loaded);
+    }
+
+    @Test
+    void bucketStatusRegistryRoundTripsThroughPropertiesFormat() throws Exception {
+        java.nio.file.Path registryFile = java.nio.file.Files.createTempFile("javatogpu-opencl-buckets", ".properties");
+        java.util.Map<String, OpenClValidationBucketStatus> statuses = new java.util.LinkedHashMap<>();
+        statuses.put(
+                "compileOnlyTest",
+                new OpenClValidationBucketStatus("compileOnlyTest", "passed", Instant.parse("2026-07-01T12:00:00Z"))
+        );
+        statuses.put(
+                "openClLongRunningStabilityTest",
+                new OpenClValidationBucketStatus("openClLongRunningStabilityTest", "passed", Instant.parse("2026-07-01T12:05:00Z"))
+        );
+
+        OpenClValidationBucketStatusIO.writeAll(registryFile, statuses);
+        java.util.Map<String, OpenClValidationBucketStatus> loaded = OpenClValidationBucketStatusIO.readAll(registryFile);
+
+        assertEquals(statuses, loaded);
+    }
+
+    @Test
+    void validationHistoryRoundTripsThroughPropertiesFormat() throws Exception {
+        java.nio.file.Path historyFile = java.nio.file.Files.createTempFile("javatogpu-opencl-history", ".properties");
+        java.util.List<OpenClValidationHistoryEntry> entries = java.util.List.of(
+                new OpenClValidationHistoryEntry(
+                        Instant.parse("2026-07-01T12:10:00Z"),
+                        "NVIDIA",
+                        "OpenCL",
+                        "Mock GPU A",
+                        "Mock Vendor",
+                        "1.2.3",
+                        "OpenCL 3.0 Mock",
+                        "compileOnlyTest=passed, performanceStressTest=passed",
+                        "passed",
+                        "passed (perlin=passed, packedBlob=passed)"
+                ),
+                new OpenClValidationHistoryEntry(
+                        Instant.parse("2026-07-01T12:00:00Z"),
+                        "Intel",
+                        "OpenCL",
+                        "Mock GPU B",
+                        "Mock Vendor",
+                        "1.2.2",
+                        "OpenCL 3.0 Mock",
+                        "compileOnlyTest=passed",
+                        "not recorded",
+                        "not recorded"
+                )
+        );
+
+        OpenClValidationHistoryIO.writeAll(historyFile, entries);
+        java.util.List<OpenClValidationHistoryEntry> loaded = OpenClValidationHistoryIO.readAll(historyFile);
+
+        assertEquals(entries, loaded);
+    }
+
+    @Test
+    void workloadSummaryRoundTripsThroughPropertiesFormat() throws Exception {
+        java.nio.file.Path summaryFile = java.nio.file.Files.createTempFile("javatogpu-opencl-workloads", ".properties");
+        OpenClWorkloadValidationSummary summary = new OpenClWorkloadValidationSummary(
+                Instant.parse("2026-07-01T12:00:00Z"),
+                "passed",
+                "passed",
+                "passed",
+                "passed",
+                "passed"
+        );
+
+        OpenClWorkloadValidationSummaryIO.write(summaryFile, summary);
+        OpenClWorkloadValidationSummary loaded = OpenClWorkloadValidationSummaryIO.readIfExists(summaryFile).orElseThrow();
+
+        assertEquals(summary, loaded);
+    }
+
+    @Test
     void backendValidationReportUsesRuntimeDeviceInfo() {
         OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend(OpenClGpuRuntimeBackend.CacheMode.SHARED) {
             @Override

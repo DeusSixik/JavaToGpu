@@ -141,7 +141,7 @@ public final class AsmExpressionLifter {
                     || block.terminatorKind() == AsmTerminatorKind.SWITCH) {
                 throw new AsmFrontendException("AsmExpressionLifter currently supports only linear ASM blocks, but got "
                         + block.terminatorKind() + " in " + ownerInternalName + "." + methodNode.name + methodNode.desc
-                        + "; switch to structured ASM lifting or rewrite the bytecode into the GPU-friendly ASM subset from docs/gpu-friendly-asm-contract.md");
+                        + "; switch to structured ASM lifting or rewrite the bytecode into the GPU-friendly ASM subset from docs/ASM-Contract.md");
             }
         }
     }
@@ -1132,7 +1132,7 @@ public final class AsmExpressionLifter {
             case Opcodes.RETURN -> state.emit(new GpuIrReturn(null));
             default -> throw new AsmFrontendException("AsmExpressionLifter does not yet support opcode "
                     + instruction.opcodeName() + " in linear lifting"
-                    + "; rewrite this bytecode pattern into the GPU-friendly ASM subset from docs/gpu-friendly-asm-contract.md");
+                    + "; rewrite this bytecode pattern into the GPU-friendly ASM subset from docs/ASM-Contract.md");
         }
     }
 
@@ -1262,7 +1262,7 @@ public final class AsmExpressionLifter {
     private void liftTypeInstruction(LiftingState state, TypeInsnNode instruction, AsmInstruction asmInstruction) {
         throw new AsmFrontendException("AsmExpressionLifter does not yet support object construction patterns like "
                 + asmInstruction.opcodeName() + " (" + instruction.desc + ")"
-                + "; restrict construction to supported pointer/vector/struct value patterns from docs/gpu-friendly-asm-contract.md");
+                + "; restrict construction to supported pointer/vector/struct value patterns from docs/ASM-Contract.md");
     }
 
     private void liftPopInstruction(LiftingState state) {

@@ -18,7 +18,7 @@ final class OpenClFailureFormatter {
                         + "]: "
                         + rootMessage(cause)
                         + "; check the generated kernel source and enable ABI debug for layout-sensitive failures"
-                        + "; if this is a repeated driver-specific failure, compare against docs/opencl-known-device-quirks.md",
+                        + "; if this is a repeated driver-specific failure, compare against docs/Device-Quirks.md",
                 cause
         );
     }

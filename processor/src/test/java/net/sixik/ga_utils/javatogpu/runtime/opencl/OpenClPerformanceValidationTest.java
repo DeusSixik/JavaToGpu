@@ -213,7 +213,7 @@ class OpenClPerformanceValidationTest {
             }
 
             @Override
-            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig executionConfig) {
                 // no-op for performance validation tests
             }
 

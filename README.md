@@ -6,18 +6,21 @@ You write a restricted Java method, mark it with `@GPU`, and JavaToGpu validates
 
 ## Documentation
 
-- Supported subset: [docs/supported-subset-contract.md](docs/supported-subset-contract.md)
-- Quick support matrix: [docs/support-matrix.md](docs/support-matrix.md)
-- OpenCL constant data model: [docs/opencl-constant-data-model.md](docs/opencl-constant-data-model.md)
-- Packed blob/view model: [docs/packed-blob-view-model.md](docs/packed-blob-view-model.md)
-- Runtime configuration: [docs/runtime-configuration.md](docs/runtime-configuration.md)
-- Reusable helper model: [docs/reusable-helper-model.md](docs/reusable-helper-model.md)
-- Device requirements: [docs/device-requirements.md](docs/device-requirements.md)
-- OpenCL validation matrix: [docs/opencl-validation-matrix.md](docs/opencl-validation-matrix.md)
-- Fallback mode: [docs/fallback-mode.md](docs/fallback-mode.md)
-- Known limitations: [docs/known-limitations.md](docs/known-limitations.md)
-- OpenCL build debugging: [docs/debugging-opencl-build-failures.md](docs/debugging-opencl-build-failures.md)
-- Diagnostics glossary: [docs/gpu-diagnostics-guide.md](docs/gpu-diagnostics-guide.md)
+- Wiki home: [docs/Home.md](docs/Home.md)
+- Getting started: [docs/Getting-Started.md](docs/Getting-Started.md)
+- API overview: [docs/API-Overview.md](docs/API-Overview.md)
+- Language contract: [docs/Language-Contract.md](docs/Language-Contract.md)
+- ASM contract: [docs/ASM-Contract.md](docs/ASM-Contract.md)
+- Runtime guide: [docs/Runtime-Guide.md](docs/Runtime-Guide.md)
+- OpenCL data model: [docs/OpenCL-Data-Model.md](docs/OpenCL-Data-Model.md)
+- Validation and operations: [docs/Validation-and-Operations.md](docs/Validation-and-Operations.md)
+- Device quirks: [docs/Device-Quirks.md](docs/Device-Quirks.md)
+- Troubleshooting: [docs/Troubleshooting.md](docs/Troubleshooting.md)
+- Known limitations: [docs/Known-Limitations.md](docs/Known-Limitations.md)
+- Cookbook: [docs/Cookbook.md](docs/Cookbook.md)
+- FAQ: [docs/FAQ.md](docs/FAQ.md)
+
+Maintainer planning, roadmaps, and historical design notes now live in `docs-project-plan/`.
 
 ## What You Get
 
@@ -157,6 +160,10 @@ GpuGeneratedLauncherInvoker.invokeWithGlobalWorkSize(
 ```
 
 Programmatic runtime code can also use `GpuExecutionConfig.oneDimensional(...)` with `GpuRuntime.invoke(...)` when calling through descriptors directly.
+
+For 2D dispatch, use `GpuExecutionConfig.twoDimensional(...)` through `GpuRuntime.invoke(...)` or `GpuGeneratedLauncherInvoker.invokeWithConfig(...)`.
+
+The explicit runtime execution model currently supports 1D and 2D launch configs.
 
 ## Runtime Failure Modes
 

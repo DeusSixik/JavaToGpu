@@ -2,6 +2,8 @@ plugins {
     id 'java'
 }
 
+import java.time.Instant
+
 group = 'net.sixik.ga_utils'
 version = '1.0-SNAPSHOT'
 
@@ -23,6 +25,21 @@ def osName = System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT)
 def lwjglNatives = osName.contains("win")
         ? "natives-windows"
         : (osName.contains("mac") ? "natives-macos" : "natives-linux")
+def openClBucketStatusFile = layout.buildDirectory.file('reports/opencl/bucket-status.properties').get().asFile
+
+def recordBucketStatus = { String taskName, String status ->
+    Properties properties = new Properties()
+    if (openClBucketStatusFile.exists()) {
+        openClBucketStatusFile.withInputStream { properties.load(it) }
+    } else {
+        openClBucketStatusFile.parentFile.mkdirs()
+    }
+    String prefix = taskName.replaceAll('[^a-zA-Z0-9]+', '_')
+    properties.setProperty(prefix + '.taskName', taskName)
+    properties.setProperty(prefix + '.status', status)
+    properties.setProperty(prefix + '.recordedAtUtc', Instant.now().toString())
+    openClBucketStatusFile.withOutputStream { properties.store(it, 'JavaToGpu OpenCL validation bucket status registry') }
+}
 
 dependencies {
     testImplementation platform('org.junit:junit-bom:5.10.0')
@@ -55,6 +72,7 @@ tasks.register('compileOnlyTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.*'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.*.*'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('runtimeOpenClTest', Test) {
@@ -67,6 +85,7 @@ tasks.register('runtimeOpenClTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.*'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.*'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('imageOpenClTest', Test) {
@@ -86,6 +105,7 @@ tasks.register('imageOpenClTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*image*'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Image*'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('structAbiTest', Test) {
@@ -104,6 +124,7 @@ tasks.register('structAbiTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.*vector*'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.*Vector*'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('atomicsCompileTest', Test) {
@@ -118,6 +139,7 @@ tasks.register('atomicsCompileTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*atomic*'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Atomic*'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('localMemoryTest', Test) {
@@ -134,6 +156,7 @@ tasks.register('localMemoryTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*local*'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.frontend.GpuFrontendServiceTest.*Local*'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('performanceStressTest', Test) {
@@ -148,6 +171,7 @@ tasks.register('performanceStressTest', Test) {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.repeatedStructAndVectorMarshallingRoundsRemainStable'
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClArgumentMarshallerTest.repeatedImageAndSamplerMarshallingRoundsRemainStable'
     }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('integrationOpenClSmokeTest', Test) {
@@ -159,6 +183,35 @@ tasks.register('integrationOpenClSmokeTest', Test) {
     filter {
         includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest'
     }
+    doLast { recordBucketStatus(name, 'passed') }
+}
+
+tasks.register('openClWorkloadValidationTest', Test) {
+    group = 'verification'
+    description = 'Runs real-device CPU-vs-GPU validation for serious workload buckets.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    systemProperty 'javatogpu.opencl.workloadValidation', 'true'
+    systemProperty 'javatogpu.opencl.workloadSummaryFile', layout.buildDirectory.file('reports/opencl/workload-summary.properties').get().asFile.absolutePath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.seriousWorkloadBucketRemainsEquivalentOnAvailableOpenClDevice'
+    }
+    doLast { recordBucketStatus(name, 'passed') }
+}
+
+tasks.register('openClLongRunningStabilityTest', Test) {
+    group = 'verification'
+    description = 'Runs long-running real-device OpenCL ABI/resource stability coverage.'
+    useJUnitPlatform()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    systemProperty 'javatogpu.opencl.longRunning', 'true'
+    systemProperty 'javatogpu.opencl.longRunningSummaryFile', layout.buildDirectory.file('reports/opencl/long-running-summary.properties').get().asFile.absolutePath
+    filter {
+        includeTestsMatching 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClGpuRuntimeBackendIntegrationTest.longRunning*'
+    }
+    doLast { recordBucketStatus(name, 'passed') }
 }
 
 tasks.register('openClValidationReport', JavaExec) {
@@ -167,6 +220,11 @@ tasks.register('openClValidationReport', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'net.sixik.ga_utils.javatogpu.runtime.opencl.OpenClValidationReporter'
     systemProperty 'javatogpu.opencl.validationReportFile', layout.buildDirectory.file('reports/opencl/validation-report.md').get().asFile.absolutePath
+    systemProperty 'javatogpu.opencl.longRunningSummaryFile', layout.buildDirectory.file('reports/opencl/long-running-summary.properties').get().asFile.absolutePath
+    systemProperty 'javatogpu.opencl.workloadSummaryFile', layout.buildDirectory.file('reports/opencl/workload-summary.properties').get().asFile.absolutePath
+    systemProperty 'javatogpu.opencl.bucketStatusFile', openClBucketStatusFile.absolutePath
+    systemProperty 'javatogpu.opencl.validationHistoryFile', layout.buildDirectory.file('reports/opencl/validation-history.properties').get().asFile.absolutePath
+    systemProperty 'javatogpu.opencl.validationHistoryMarkdownFile', layout.buildDirectory.file('reports/opencl/validation-history.md').get().asFile.absolutePath
 }
 
 tasks.register('openClVendorValidation') {
@@ -187,6 +245,19 @@ tasks.register('openClNvidiaRoutine') {
     description = 'Runs the current NVIDIA-focused OpenCL validation, stress, benchmark, and report routine.'
     dependsOn 'openClVendorValidation'
     dependsOn 'integrationOpenClSmokeTest'
+    dependsOn 'openClWorkloadValidationTest'
+    dependsOn 'openClLongRunningStabilityTest'
+    dependsOn 'benchmarkTest'
+    finalizedBy 'openClValidationReport'
+}
+
+tasks.register('openClOperationalRoutine') {
+    group = 'verification'
+    description = 'Runs the full vendor-neutral OpenCL operational validation routine with report artifacts.'
+    dependsOn 'openClVendorValidation'
+    dependsOn 'integrationOpenClSmokeTest'
+    dependsOn 'openClWorkloadValidationTest'
+    dependsOn 'openClLongRunningStabilityTest'
     dependsOn 'benchmarkTest'
     finalizedBy 'openClValidationReport'
 }
@@ -197,4 +268,5 @@ tasks.register('benchmarkTest', Test) {
     useJUnitPlatform()
     testClassesDirs = sourceSets.benchmark.output.classesDirs
     classpath = sourceSets.benchmark.runtimeClasspath
+    doLast { recordBucketStatus(name, 'passed') }
 }

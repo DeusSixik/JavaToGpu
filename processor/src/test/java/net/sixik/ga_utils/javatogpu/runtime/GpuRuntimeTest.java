@@ -27,9 +27,21 @@ class GpuRuntimeTest {
             GpuKernelInvocation invocation = capturedInvocation.get();
             assertEquals(11L, invocation.globalWorkSize());
             assertEquals(11L, invocation.executionConfig().globalWorkSize());
+            assertEquals(1, invocation.executionConfig().dimensions());
         } finally {
             GpuRuntime.setBackend(previousBackend);
         }
+    }
+
+    @Test
+    void executionConfigSupportsTwoDimensionalLaunches() {
+        GpuExecutionConfig config = GpuExecutionConfig.twoDimensional(16L, 8L, 4L, 2L);
+
+        assertEquals(2, config.dimensions());
+        assertEquals(16L, config.globalX());
+        assertEquals(8L, config.globalY());
+        assertEquals(4L, config.localX());
+        assertEquals(2L, config.localY());
     }
 
     @Test
@@ -39,7 +51,17 @@ class GpuRuntimeTest {
                 () -> GpuExecutionConfig.oneDimensional(0L)
         );
 
-        assertEquals("globalWorkSize must be positive: 0", exception.getMessage());
+        assertEquals("globalX must be positive: 0", exception.getMessage());
+    }
+
+    @Test
+    void executionConfigRejectsInvalidTwoDimensionalLocalShape() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> GpuExecutionConfig.twoDimensional(16L, 8L, 4L, 0L)
+        );
+
+        assertEquals("localX/localY must both be zero or both be > 0 for 2D execution", exception.getMessage());
     }
 
     @Test

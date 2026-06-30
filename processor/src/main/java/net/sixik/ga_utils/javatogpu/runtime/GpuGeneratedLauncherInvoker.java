@@ -22,7 +22,37 @@ public final class GpuGeneratedLauncherInvoker {
     }
 
     public static Object invokeWithConfig(Class<?> ownerClass, String methodName, GpuExecutionConfig executionConfig, Object... arguments) {
-        return invokeWithGlobalWorkSize(ownerClass, methodName, executionConfig.globalWorkSize(), arguments);
+        GpuRuntime.invoke(executionConfig, descriptor(ownerClass, methodName), arguments);
+        return null;
+    }
+
+    private static GpuKernelDescriptor descriptor(Class<?> ownerClass, String methodName) {
+        try {
+            Class<?> launcherClass = Class.forName(
+                    GpuLauncherNaming.launcherClassName(ownerClass, methodName),
+                    true,
+                    ownerClass.getClassLoader()
+            );
+            return (GpuKernelDescriptor) launcherClass.getField("KERNEL_DESCRIPTOR").get(null);
+        } catch (ClassNotFoundException exception) {
+            throw new IllegalArgumentException(
+                    "Generated GPU launcher not found for "
+                            + ownerClass.getName()
+                            + "#"
+                            + methodName
+                            + " at "
+                            + GpuLauncherNaming.launcherClassName(ownerClass, methodName),
+                    exception
+            );
+        } catch (NoSuchFieldException | IllegalAccessException exception) {
+            throw new IllegalStateException(
+                    "Generated GPU launcher KERNEL_DESCRIPTOR is not accessible for "
+                            + ownerClass.getName()
+                            + "#"
+                            + methodName,
+                    exception
+            );
+        }
     }
 
     private static Object invokeLauncherMethod(Class<?> ownerClass, String methodName, String launcherMethodName, Object... arguments) {

@@ -8,6 +8,6 @@ public record OpenClPreparedExecution(
         java.util.List<OpenClLocalBinding> localBindings,
         java.util.List<OpenClScalarBinding> scalarBindings,
         java.util.List<OpenClPreparedArgumentBinding> argumentBindings,
-        Long explicitGlobalWorkSize
+        net.sixik.ga_utils.javatogpu.runtime.GpuExecutionConfig explicitExecutionConfig
 ) {
 }

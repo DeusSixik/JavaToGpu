@@ -719,7 +719,7 @@ public final class AsmSubsetValidator {
         if (lineNumber >= 0) {
             message.append(", line ").append(lineNumber);
         }
-        message.append("; rewrite the bytecode into the GPU-friendly ASM subset from docs/gpu-friendly-asm-contract.md");
+        message.append("; rewrite the bytecode into the GPU-friendly ASM subset from docs/ASM-Contract.md");
         throw new AsmFrontendException(message.toString());
     }
 

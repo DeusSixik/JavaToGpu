@@ -179,7 +179,7 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                         Diagnostic.Kind.ERROR,
                         "Failed to compile @GPU method: "
                                 + exception.getMessage()
-                                + "; see docs/gpu-diagnostics-guide.md for common fixes",
+                                + "; see docs/Troubleshooting.md for common fixes",
                         method
                 );
             }

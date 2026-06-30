@@ -7,6 +7,7 @@ public record OpenClPreparedExecution(
         java.util.List<OpenClPreparedBufferBinding> bufferBindings,
         java.util.List<OpenClLocalBinding> localBindings,
         java.util.List<OpenClScalarBinding> scalarBindings,
-        java.util.List<OpenClPreparedArgumentBinding> argumentBindings
+        java.util.List<OpenClPreparedArgumentBinding> argumentBindings,
+        Long explicitGlobalWorkSize
 ) {
 }

@@ -197,4 +197,17 @@ class GpuTypeSupportTest {
         assertEquals(4, GpuTypeSupport.vectorStorageWidth("UByte3"));
     }
 
+    @Test
+    void discoversAnnotatedSignedNarrowVectorTypes() {
+        assertTrue(GpuTypeSupport.isSupportedVectorType("Byte2"));
+        assertTrue(GpuTypeSupport.isSupportedVectorType("Short4"));
+        assertTrue(GpuTypeSupport.isSupportedVectorClassName("net.sixik.ga_utils.javatogpu.api.Byte3"));
+
+        assertEquals("char2", GpuTypeSupport.openClVectorTypeName("Byte2"));
+        assertEquals("short", GpuTypeSupport.vectorComponentType("Short3", "y"));
+        assertEquals(List.of("x", "y", "z"), GpuTypeSupport.vectorFieldNames("net.sixik.ga_utils.javatogpu.api.Byte3"));
+        assertEquals(4, GpuTypeSupport.vectorStorageWidth("Byte3"));
+        assertEquals(4 * Short.BYTES, GpuTypeSupport.vectorByteSize("Short4"));
+    }
+
 }

@@ -36,7 +36,8 @@ public final class OpenClExecutionPreparer {
                 preparedBuffers,
                 plan.localBindings(),
                 plan.scalarBindings(),
-                preparedArguments
+                preparedArguments,
+                null
         );
     }
 }

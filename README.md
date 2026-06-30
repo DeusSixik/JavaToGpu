@@ -11,6 +11,7 @@ You write a restricted Java method, mark it with `@GPU`, and JavaToGpu validates
 - OpenCL constant data model: [docs/opencl-constant-data-model.md](docs/opencl-constant-data-model.md)
 - Packed blob/view model: [docs/packed-blob-view-model.md](docs/packed-blob-view-model.md)
 - Runtime configuration: [docs/runtime-configuration.md](docs/runtime-configuration.md)
+- Reusable helper model: [docs/reusable-helper-model.md](docs/reusable-helper-model.md)
 - Device requirements: [docs/device-requirements.md](docs/device-requirements.md)
 - OpenCL validation matrix: [docs/opencl-validation-matrix.md](docs/opencl-validation-matrix.md)
 - Fallback mode: [docs/fallback-mode.md](docs/fallback-mode.md)
@@ -23,10 +24,12 @@ You write a restricted Java method, mark it with `@GPU`, and JavaToGpu validates
 - Write kernels in Java instead of hand-writing OpenCL C.
 - Built-in `GPU.*` intrinsics for indexing, math, atomics, barriers, images, and samplers.
 - `@CCode` helpers for reusable GPU-side functions.
+- `@CCodeLibrary` for reusable helper modules across compilation units.
 - Pointer wrappers like `FloatPtr` and `DoublePtr` for helper mutation patterns.
 - Vector wrappers like `Float2`, `Float4`, `Int2`, `Double4`.
 - `@GPUStruct` support for user-defined OpenCL structs.
 - Kernel launcher generation and runtime dispatch through `GpuRuntime`.
+- Repo-local validation buckets for compile-only, runtime, ABI, image, stress, and real-device smoke coverage.
 - A public `GpuProgramCompiler` facade for both source and structured ASM inputs.
 
 The public annotation package is `net.sixik.ga_utils.javatogpu.api.annotations`.
@@ -55,6 +58,7 @@ Implemented and working:
 - helper methods via `@CCode`
 - inline helpers
 - native helper bodies via `@CCode(code = "...")`
+- reusable helper libraries via `@CCodeLibrary`
 - pointer helpers
 - vector local values, helper params / returns and kernel parameters
 - `@GPUStruct`
@@ -62,6 +66,7 @@ Implemented and working:
 - struct array buffers
 - vector array buffers
 - integer atomics
+- broad practical `GPU.*` math/common coverage for scalar and vector forms, including trig, inverse trig, hyperbolic math, and the conversion helpers needed by the current C2ME-style workload
 - local memory helper intrinsics
 - image / sampler kernel code generation
 - runtime image / sampler marshalling for real OpenCL handles
@@ -73,12 +78,14 @@ Implemented and working:
 - OpenCL parameter qualifiers via `@OpenCLQualifiers` for low-level pointer-like cases
 - OpenCL address spaces: `@GPUGlobal`, `@GPUConstant`, `@GPULocal`
 - structured ASM frontend for canonical GPU-friendly bytecode
+- repeated warm-session real-device stability coverage for scalar buffers, struct arrays, vector arrays, and image workflows
 
 Still intentionally limited:
 
 - non-`void` `@GPU` entry methods are not supported
 - arbitrary Java object allocation is not supported
 - arbitrary Java method calls are not supported
+- `@CCode(inline = true)` emits inline backend helper functions, but is not a call-site macro system
 - standalone host-side `image2d_msaa_t` create/upload/readback is intentionally not part of the normal runtime API
 - CUDA backend is not implemented yet
 - ASM frontend currently expects a strict GPU-friendly JVM subset rather than arbitrary bytecode
@@ -135,6 +142,21 @@ try (GpuRuntimeScope ignored = GpuRuntime.useOpenClSharedCache()) {
     GpuRuntime.shutdownOpenClSharedCache();
 }
 ```
+
+For packed/blob-style kernels where logical item count does not match raw buffer lengths, use the generated launcher overload with explicit work size:
+
+```java
+GpuGeneratedLauncherInvoker.invokeWithGlobalWorkSize(
+        PackedBlobWorkload.class,
+        "kernel",
+        itemCount,
+        blob,
+        view,
+        output
+);
+```
+
+Programmatic runtime code can also use `GpuExecutionConfig.oneDimensional(...)` with `GpuRuntime.invoke(...)` when calling through descriptors directly.
 
 ## Runtime Failure Modes
 

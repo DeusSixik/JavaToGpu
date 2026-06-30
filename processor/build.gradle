@@ -182,6 +182,15 @@ tasks.register('openClVendorValidation') {
     finalizedBy 'openClValidationReport'
 }
 
+tasks.register('openClNvidiaRoutine') {
+    group = 'verification'
+    description = 'Runs the current NVIDIA-focused OpenCL validation, stress, benchmark, and report routine.'
+    dependsOn 'openClVendorValidation'
+    dependsOn 'integrationOpenClSmokeTest'
+    dependsOn 'benchmarkTest'
+    finalizedBy 'openClValidationReport'
+}
+
 tasks.register('benchmarkTest', Test) {
     group = 'verification'
     description = 'Runs manual benchmark scenarios for frontend and runtime performance baselines.'

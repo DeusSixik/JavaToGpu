@@ -1168,7 +1168,22 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
                 + "    public static " + returnType + " invoke(" + parameterSignature + ") {\n"
                 + emitLauncherInvokeBody(method)
                 + "    }\n"
+                + emitExplicitWorkSizeLauncher(method, parameterSignature)
                 + "}\n";
+    }
+
+    private String emitExplicitWorkSizeLauncher(ExecutableElement method, String parameterSignature) {
+        if (!"void".equals(method.getReturnType().toString())) {
+            return "";
+        }
+
+        String signature = parameterSignature.isEmpty()
+                ? "long globalWorkSize"
+                : "long globalWorkSize, " + parameterSignature;
+        return "\n"
+                + "    public static void invokeWithGlobalWorkSize(" + signature + ") {\n"
+                + emitLauncherInvokeBodyWithExplicitWorkSize(method)
+                + "    }\n";
     }
 
     private String emitLauncherInvokeBody(ExecutableElement method) {
@@ -1183,6 +1198,15 @@ public final class GpuCompilerProcessor extends AbstractProcessor {
         }
 
         return "        throw new UnsupportedOperationException(\"Non-void GPU launchers are not implemented yet\");\n";
+    }
+
+    private String emitLauncherInvokeBodyWithExplicitWorkSize(ExecutableElement method) {
+        String arguments = method.getParameters().stream()
+                .map(parameter -> parameter.getSimpleName().toString())
+                .collect(Collectors.joining(", "));
+        return "        net.sixik.ga_utils.javatogpu.runtime.GpuRuntime.invoke(globalWorkSize, KERNEL_DESCRIPTOR"
+                + (arguments.isEmpty() ? "" : ", " + arguments)
+                + ");\n";
     }
 
     private String toParameterDeclaration(VariableElement parameter) {

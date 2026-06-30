@@ -1038,6 +1038,42 @@ class GpuFrontendServiceTest {
     }
 
     @Test
+    void parsesValidatesLowersAndEmitsVectorFloatDoubleConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal double[] output) {
+                    int id = GPU.get_global_id(0);
+                    Int2 a = new Int2(3, 5);
+                    UShort2 b = new UShort2((short) 7, (short) 9);
+                    Byte3 c = new Byte3((byte) 1, (byte) 2, (byte) 3);
+                    ULong3 d = new ULong3(11L, 13L, 17L);
+                    Float2 f0 = GPU.convert_float(a);
+                    Float2 f1 = GPU.convert_float(b);
+                    Double3 g0 = GPU.convert_double(c);
+                    Double3 g1 = GPU.convert_double(d);
+                    output[id] = f0.x + f0.y + f1.x + f1.y + g0.x + g0.y + g0.z + g1.x + g1.y + g1.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global double* output) {
+                    int id = get_global_id(0);
+                    int2 a = (int2)(3, 5);
+                    ushort2 b = (ushort2)(((short) 7), ((short) 9));
+                    char3 c = (char3)(((char) 1), ((char) 2), ((char) 3));
+                    ulong3 d = (ulong3)(11L, 13L, 17L);
+                    float2 f0 = convert_float(a);
+                    float2 f1 = convert_float(b);
+                    double3 g0 = convert_double(c);
+                    double3 g1 = convert_double(d);
+                    output[id] = (((((((((f0.x + f0.y) + f1.x) + f1.y) + g0.x) + g0.y) + g0.z) + g1.x) + g1.y) + g1.z);
+                }""", kernel);
+    }
+
+    @Test
     void parsesValidatesLowersAndEmitsLongBitBuiltins() {
         String methodSource = """
                 @GPU
@@ -1185,6 +1221,271 @@ class GpuFrontendServiceTest {
                     ulong l1 = ((ulong) (b));
                     ulong l2 = ((ulong) (c));
                     output[id] = (((((convert_long(u0) + convert_long(u1)) + convert_long(u2)) + convert_long(l0)) + convert_long(l1)) + convert_long(l2));
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsUnsignedAliasNarrowConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    UByte a = new UByte((byte) 7);
+                    UShort b = new UShort((short) 9);
+                    UInt c = new UInt(11);
+                    ULong d = new ULong(13L);
+                    byte c0 = GPU.convert_char(a);
+                    UByte c1 = GPU.convert_uchar(b);
+                    short c2 = GPU.convert_short(c);
+                    UShort c3 = GPU.convert_ushort(d);
+                    output[id] = c0 + c1.value + c2 + c3.value;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int id = get_global_id(0);
+                    uchar a = ((uchar) ((char) 7));
+                    ushort b = ((ushort) ((short) 9));
+                    uint c = ((uint) 11);
+                    ulong d = ((ulong) 13L);
+                    char c0 = convert_char(a);
+                    uchar c1 = convert_uchar(b);
+                    short c2 = convert_short(c);
+                    ushort c3 = convert_ushort(d);
+                    output[id] = (((c0 + c1) + c2) + c3);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsUnsignedAliasNarrowSaturatingConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    UByte a = new UByte((byte) 7);
+                    UShort b = new UShort((short) 320);
+                    UInt c = new UInt(11);
+                    ULong d = new ULong(13L);
+                    byte c0 = GPU.convert_char_sat(a);
+                    UByte c1 = GPU.convert_uchar_sat(b);
+                    short c2 = GPU.convert_short_sat(c);
+                    UShort c3 = GPU.convert_ushort_sat(d);
+                    output[id] = c0 + c1.value + c2 + c3.value;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int id = get_global_id(0);
+                    uchar a = ((uchar) ((char) 7));
+                    ushort b = ((ushort) ((short) 320));
+                    uint c = ((uint) 11);
+                    ulong d = ((ulong) 13L);
+                    char c0 = convert_char_sat(a);
+                    uchar c1 = convert_uchar_sat(b);
+                    short c2 = convert_short_sat(c);
+                    ushort c3 = convert_ushort_sat(d);
+                    output[id] = (((c0 + c1) + c2) + c3);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsUnsignedAliasCoreWideSaturatingConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    UByte a = new UByte((byte) 7);
+                    UShort b = new UShort((short) 9);
+                    UInt c = new UInt(11);
+                    ULong d = new ULong(13L);
+                    output[id] = GPU.convert_int_sat(a) + GPU.convert_int_sat(b) + GPU.convert_int_sat(c) + GPU.convert_int_sat(d)
+                            + GPU.convert_long_sat(a) + GPU.convert_long_sat(b) + GPU.convert_long_sat(c) + GPU.convert_long_sat(d)
+                            + GPU.convert_uint_sat(a).value + GPU.convert_uint_sat(b).value + GPU.convert_uint_sat(c).value + GPU.convert_uint_sat(d).value
+                            + GPU.convert_ulong_sat(a).value + GPU.convert_ulong_sat(b).value + GPU.convert_ulong_sat(c).value + GPU.convert_ulong_sat(d).value;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global long* output) {
+                    int id = get_global_id(0);
+                    uchar a = ((uchar) ((char) 7));
+                    ushort b = ((ushort) ((short) 9));
+                    uint c = ((uint) 11);
+                    ulong d = ((ulong) 13L);
+                    output[id] = (((((((((((((((convert_int_sat(a) + convert_int_sat(b)) + convert_int_sat(c)) + convert_int_sat(d)) + convert_long_sat(a)) + convert_long_sat(b)) + convert_long_sat(c)) + convert_long_sat(d)) + convert_uint_sat(a)) + convert_uint_sat(b)) + convert_uint_sat(c)) + convert_uint_sat(d)) + convert_ulong_sat(a)) + convert_ulong_sat(b)) + convert_ulong_sat(c)) + convert_ulong_sat(d));
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsSignedNarrowSourceRegularConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    byte a = (byte) 7;
+                    short b = (short) 9;
+                    char c = 'D';
+                    byte c0 = GPU.convert_char(a);
+                    UByte c1 = GPU.convert_uchar(b);
+                    short c2 = GPU.convert_short(c);
+                    UShort c3 = GPU.convert_ushort(a);
+                    output[id] = c0 + c1.value + c2 + c3.value;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int id = get_global_id(0);
+                    char a = ((char) 7);
+                    short b = ((short) 9);
+                    ushort c = 68;
+                    char c0 = convert_char(a);
+                    uchar c1 = convert_uchar(b);
+                    short c2 = convert_short(c);
+                    ushort c3 = convert_ushort(a);
+                    output[id] = (((c0 + c1) + c2) + c3);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorCoreWideConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 a = new Float2(1.5f, 2.5f);
+                    Double3 b = new Double3(3.5, 4.5, 5.5);
+                    Int2 i = GPU.convert_int(a);
+                    UInt2 u = GPU.convert_uint(a);
+                    Long3 l = GPU.convert_long(b);
+                    ULong3 ul = GPU.convert_ulong(b);
+                    output[id] = i.x + i.y + u.x + u.y + l.x + l.y + l.z + ul.x + ul.y + ul.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global long* output) {
+                    int id = get_global_id(0);
+                    float2 a = (float2)(1.5f, 2.5f);
+                    double3 b = (double3)(3.5, 4.5, 5.5);
+                    int2 i = convert_int(a);
+                    uint2 u = convert_uint(a);
+                    long3 l = convert_long(b);
+                    ulong3 ul = convert_ulong(b);
+                    output[id] = (((((((((i.x + i.y) + u.x) + u.y) + l.x) + l.y) + l.z) + ul.x) + ul.y) + ul.z);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorCoreWideSaturatingConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal long[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 a = new Float2(-1.5f, 2.5f);
+                    Double3 b = new Double3(3.5, 4.5, 5.5);
+                    Int2 i = GPU.convert_int_sat(a);
+                    UInt2 u = GPU.convert_uint_sat(a);
+                    Long3 l = GPU.convert_long_sat(b);
+                    ULong3 ul = GPU.convert_ulong_sat(b);
+                    output[id] = i.x + i.y + u.x + u.y + l.x + l.y + l.z + ul.x + ul.y + ul.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global long* output) {
+                    int id = get_global_id(0);
+                    float2 a = (float2)((-1.5f), 2.5f);
+                    double3 b = (double3)(3.5, 4.5, 5.5);
+                    int2 i = convert_int_sat(a);
+                    uint2 u = convert_uint_sat(a);
+                    long3 l = convert_long_sat(b);
+                    ulong3 ul = convert_ulong_sat(b);
+                    output[id] = (((((((((i.x + i.y) + u.x) + u.y) + l.x) + l.y) + l.z) + ul.x) + ul.y) + ul.z);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsUnsignedNarrowVectorConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 a = new Float2(7.5f, 320.25f);
+                    Double3 b = new Double3(-2.0, 500.0, 70000.0);
+                    UByte2 c0 = GPU.convert_uchar(a);
+                    UShort2 c1 = GPU.convert_ushort(a);
+                    UByte3 c2 = GPU.convert_uchar_sat(b);
+                    UShort3 c3 = GPU.convert_ushort_sat(b);
+                    output[id] = c0.x + c0.y + c1.x + c1.y + c2.x + c2.y + c2.z + c3.x + c3.y + c3.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int id = get_global_id(0);
+                    float2 a = (float2)(7.5f, 320.25f);
+                    double3 b = (double3)((-2.0), 500.0, 70000.0);
+                    uchar2 c0 = convert_uchar(a);
+                    ushort2 c1 = convert_ushort(a);
+                    uchar3 c2 = convert_uchar_sat(b);
+                    ushort3 c3 = convert_ushort_sat(b);
+                    output[id] = (((((((((c0.x + c0.y) + c1.x) + c1.y) + c2.x) + c2.y) + c2.z) + c3.x) + c3.y) + c3.z);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsSignedNarrowVectorConversions() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 a = new Float2(7.5f, 320.25f);
+                    Double3 b = new Double3(-2.0, 500.0, 70000.0);
+                    Byte2 c0 = GPU.convert_char(a);
+                    Short2 c1 = GPU.convert_short(a);
+                    Byte3 c2 = GPU.convert_char_sat(b);
+                    Short3 c3 = GPU.convert_short_sat(b);
+                    output[id] = c0.x + c0.y + c1.x + c1.y + c2.x + c2.y + c2.z + c3.x + c3.y + c3.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int id = get_global_id(0);
+                    float2 a = (float2)(7.5f, 320.25f);
+                    double3 b = (double3)((-2.0), 500.0, 70000.0);
+                    char2 c0 = convert_char(a);
+                    short2 c1 = convert_short(a);
+                    char3 c2 = convert_char_sat(b);
+                    short3 c3 = convert_short_sat(b);
+                    output[id] = (((((((((c0.x + c0.y) + c1.x) + c1.y) + c2.x) + c2.y) + c2.z) + c3.x) + c3.y) + c3.z);
                 }""", kernel);
     }
 
@@ -1545,6 +1846,34 @@ class GpuFrontendServiceTest {
     }
 
     @Test
+    void parsesValidatesLowersAndEmitsVectorFmaBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal double[] output) {
+                    int id = GPU.get_global_id(0);
+                    Double3 a = new Double3(1.0, 2.0, 3.0);
+                    Double3 b = new Double3(4.0, 5.0, 6.0);
+                    Double3 c = new Double3(0.5, 1.0, 1.5);
+                    Double3 value = GPU.fma(a, b, c);
+                    output[id] = value.x + value.y + value.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global double* output) {
+                    int id = get_global_id(0);
+                    double3 a = (double3)(1.0, 2.0, 3.0);
+                    double3 b = (double3)(4.0, 5.0, 6.0);
+                    double3 c = (double3)(0.5, 1.0, 1.5);
+                    double3 value = fma(a, b, c);
+                    output[id] = ((value.x + value.y) + value.z);
+                }""", kernel);
+    }
+
+    @Test
     void parsesValidatesLowersAndEmitsAdditionalScalarCommonBuiltins() {
         String methodSource = """
                 @GPU
@@ -1688,6 +2017,40 @@ class GpuFrontendServiceTest {
                     ushort4 d = (ushort4)(((short) 2), ((short) 5), ((short) 7), ((short) 10));
                     ushort4 hi = max(c, d);
                     ushort4 clipped = clamp(hi, (ushort4)(((short) 3)), (ushort4)(((short) 8)));
+                    output[id] = (((lo.x + lo.y) + lo.z) + clipped.w);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsSignedNarrowVectorCommonBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal int[] output) {
+                    int id = GPU.get_global_id(0);
+                    Byte3 a = new Byte3((byte) 1, (byte) 8, (byte) 3);
+                    Byte3 b = new Byte3((byte) 5, (byte) 2, (byte) 7);
+                    Byte3 lo = GPU.min(a, b);
+                    Short4 c = new Short4((short) 9, (short) 1, (short) 12, (short) 4);
+                    Short4 d = new Short4((short) 2, (short) 5, (short) 7, (short) 10);
+                    Short4 hi = GPU.max(c, d);
+                    Short4 clipped = GPU.clamp(hi, new Short4((short) 3), new Short4((short) 8));
+                    output[id] = lo.x + lo.y + lo.z + clipped.w;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global int* output) {
+                    int id = get_global_id(0);
+                    char3 a = (char3)(((char) 1), ((char) 8), ((char) 3));
+                    char3 b = (char3)(((char) 5), ((char) 2), ((char) 7));
+                    char3 lo = min(a, b);
+                    short4 c = (short4)(((short) 9), ((short) 1), ((short) 12), ((short) 4));
+                    short4 d = (short4)(((short) 2), ((short) 5), ((short) 7), ((short) 10));
+                    short4 hi = max(c, d);
+                    short4 clipped = clamp(hi, (short4)(((short) 3)), (short4)(((short) 8)));
                     output[id] = (((lo.x + lo.y) + lo.z) + clipped.w);
                 }""", kernel);
     }
@@ -1845,6 +2208,244 @@ class GpuFrontendServiceTest {
                     float2 rooted = sqrt(exp((float2)(1.0f, 4.0f)));
                     float2 scaled = log2(exp((float2)(2.0f, 8.0f)));
                     output[id] = (((trig.x + rooted.y) + scaled.x) + tan(angle).y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorHyperbolicBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 value = new Float2(0.25f, 0.5f);
+                    Float2 hyper = GPU.sinh(value).add(GPU.cosh(value));
+                    Float2 limited = GPU.tanh(value);
+                    output[id] = hyper.x + hyper.y + limited.x + limited.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float2 value = (float2)(0.25f, 0.5f);
+                    float2 hyper = (sinh(value) + cosh(value));
+                    float2 limited = tanh(value);
+                    output[id] = (((hyper.x + hyper.y) + limited.x) + limited.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsAdditionalVectorTranscendentalBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 value = new Float2(2.0f, 100.0f);
+                    Float2 raised = GPU.exp2(new Float2(3.0f, 4.0f));
+                    Float2 logged = GPU.log10(value);
+                    output[id] = raised.x + raised.y + logged.x + logged.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float2 value = (float2)(2.0f, 100.0f);
+                    float2 raised = exp2((float2)(3.0f, 4.0f));
+                    float2 logged = log10(value);
+                    output[id] = (((raised.x + raised.y) + logged.x) + logged.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorCbrtBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 value = new Float2(8.0f, 27.0f);
+                    Float2 rooted = GPU.cbrt(value);
+                    output[id] = rooted.x + rooted.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float2 value = (float2)(8.0f, 27.0f);
+                    float2 rooted = cbrt(value);
+                    output[id] = (rooted.x + rooted.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorHypotBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 x = new Float2(3.0f, 5.0f);
+                    Float2 y = new Float2(4.0f, 12.0f);
+                    Float2 value = GPU.hypot(x, y);
+                    output[id] = value.x + value.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float2 x = (float2)(3.0f, 5.0f);
+                    float2 y = (float2)(4.0f, 12.0f);
+                    float2 value = hypot(x, y);
+                    output[id] = (value.x + value.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorRemainderBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal double[] output) {
+                    int id = GPU.get_global_id(0);
+                    Double2 a = new Double2(5.5, 9.0);
+                    Double2 b = new Double2(2.0, 4.0);
+                    Double2 mod = GPU.fmod(a, b);
+                    Double2 rem = GPU.remainder(a, b);
+                    output[id] = mod.x + mod.y + rem.x + rem.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global double* output) {
+                    int id = get_global_id(0);
+                    double2 a = (double2)(5.5, 9.0);
+                    double2 b = (double2)(2.0, 4.0);
+                    double2 mod = fmod(a, b);
+                    double2 rem = remainder(a, b);
+                    output[id] = (((mod.x + mod.y) + rem.x) + rem.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorNextafterLdexpBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 start = new Float2(1.0f, 2.0f);
+                    Float2 direction = new Float2(2.0f, 1.0f);
+                    Float2 nudged = GPU.nextafter(start, direction);
+                    Int2 exponents = new Int2(1, 2);
+                    Float2 scaled = GPU.ldexp(nudged, exponents);
+                    output[id] = scaled.x + scaled.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float2 start = (float2)(1.0f, 2.0f);
+                    float2 direction = (float2)(2.0f, 1.0f);
+                    float2 nudged = nextafter(start, direction);
+                    int2 exponents = (int2)(1, 2);
+                    float2 scaled = ldexp(nudged, exponents);
+                    output[id] = (scaled.x + scaled.y);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorPownBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal double[] output) {
+                    int id = GPU.get_global_id(0);
+                    Double3 value = new Double3(2.0, 3.0, 4.0);
+                    Int3 exponent = new Int3(3, 2, 1);
+                    Double3 powered = GPU.pown(value, exponent);
+                    output[id] = powered.x + powered.y + powered.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global double* output) {
+                    int id = get_global_id(0);
+                    double3 value = (double3)(2.0, 3.0, 4.0);
+                    int3 exponent = (int3)(3, 2, 1);
+                    double3 powered = pown(value, exponent);
+                    output[id] = ((powered.x + powered.y) + powered.z);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorRootnBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float3 value = new Float3(8.0f, 27.0f, 16.0f);
+                    Int3 exponent = new Int3(3, 3, 2);
+                    Float3 rooted = GPU.rootn(value, exponent);
+                    output[id] = rooted.x + rooted.y + rooted.z;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float3 value = (float3)(8.0f, 27.0f, 16.0f);
+                    int3 exponent = (int3)(3, 3, 2);
+                    float3 rooted = rootn(value, exponent);
+                    output[id] = ((rooted.x + rooted.y) + rooted.z);
+                }""", kernel);
+    }
+
+    @Test
+    void parsesValidatesLowersAndEmitsVectorPowrBuiltins() {
+        String methodSource = """
+                @GPU
+                void kernel(@GPUGlobal float[] output) {
+                    int id = GPU.get_global_id(0);
+                    Float2 value = new Float2(4.0f, 9.0f);
+                    Float2 exponent = new Float2(0.5f, 0.5f);
+                    Float2 powered = GPU.powr(value, exponent);
+                    output[id] = powered.x + powered.y;
+                }
+                """;
+
+        GpuFrontendService service = GpuFrontendService.createDefault();
+        String kernel = service.parseValidateLowerAndEmit(methodSource);
+
+        assertEquals("""
+                __kernel void jtg_kernel(__global float* output) {
+                    int id = get_global_id(0);
+                    float2 value = (float2)(4.0f, 9.0f);
+                    float2 exponent = (float2)(0.5f, 0.5f);
+                    float2 powered = powr(value, exponent);
+                    output[id] = (powered.x + powered.y);
                 }""", kernel);
     }
 

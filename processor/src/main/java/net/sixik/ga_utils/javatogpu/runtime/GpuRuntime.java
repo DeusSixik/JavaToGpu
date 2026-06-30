@@ -270,6 +270,20 @@ public final class GpuRuntime {
         backend.invoke(new GpuKernelInvocation(descriptor, arguments));
     }
 
+    /**
+     * Invokes a generated GPU kernel through the currently configured backend using an explicit 1D global work size.
+     */
+    public static void invoke(long globalWorkSize, GpuKernelDescriptor descriptor, Object... arguments) {
+        backend.invoke(new GpuKernelInvocation(descriptor, arguments, globalWorkSize));
+    }
+
+    /**
+     * Invokes a generated GPU kernel through the currently configured backend using an explicit execution config.
+     */
+    public static void invoke(GpuExecutionConfig executionConfig, GpuKernelDescriptor descriptor, Object... arguments) {
+        backend.invoke(new GpuKernelInvocation(descriptor, arguments, executionConfig));
+    }
+
     private static GpuRuntimeScope installScopedBackend(GpuRuntimeBackend newBackend, boolean closeInstalledBackend) {
         Objects.requireNonNull(newBackend, "newBackend");
         GpuRuntimeBackend previousBackend = backend();

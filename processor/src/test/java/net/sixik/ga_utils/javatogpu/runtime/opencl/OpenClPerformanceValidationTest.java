@@ -128,6 +128,33 @@ class OpenClPerformanceValidationTest {
         assertEquals(2L, statistics.deviceBufferCreationCount());
     }
 
+    @Test
+    void explicitGlobalWorkSizePathStillReusesCompileAndBufferCaches() {
+        OpenClGpuRuntimeBackend backend = fakeBackend(OpenClGpuRuntimeBackend.CacheMode.INSTANCE);
+        byte[] blob = new byte[4096];
+        int[] output = new int[256];
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "packed_blob_kernel",
+                "javatogpu/performance/Demo/packed-blob-kernel.cl",
+                "__kernel void packed_blob_kernel(__global char* blob, __global int* output) { output[get_global_id(0)] = 1; }",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("blob", "byte[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        for (int iteration = 0; iteration < 100; iteration++) {
+            backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{blob, output}, 256L));
+        }
+
+        OpenClRuntimeStatistics statistics = backend.statistics();
+        assertEquals(100L, statistics.invocationCount());
+        assertEquals(1L, statistics.compileCount());
+        assertEquals(99L, statistics.compileCacheHitCount());
+        assertEquals(2L, statistics.deviceBufferCreationCount());
+    }
+
     private static GpuKernelDescriptor sampleDescriptor() {
         return new GpuKernelDescriptor(
                 "kernel",

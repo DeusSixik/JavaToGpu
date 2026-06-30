@@ -189,7 +189,7 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         }
         OpenClKernelArguments arguments = OpenClArgumentMarshaller.marshall(invocation.descriptor(), invocation.arguments());
         OpenClExecutionPlan plan = OpenClExecutionPlanner.plan(arguments);
-        validateInvocationPreconditions(invocation.descriptor(), plan);
+        validateInvocationPreconditions(invocation, plan);
         validateCapabilitySupport(invocation.descriptor(), plan);
         Map<GpuKernelDescriptor, OpenClCompiledKernel> kernelCache = compiledKernelCache();
         OpenClCompiledKernel compiledKernel = kernelCache.get(invocation.descriptor());
@@ -198,7 +198,18 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         } else {
             compiledKernel = kernelCache.computeIfAbsent(invocation.descriptor(), this::compileKernelChecked);
         }
-        executeKernelChecked(executionPreparer.prepare(compiledKernel, plan));
+        OpenClPreparedExecution execution = executionPreparer.prepare(compiledKernel, plan);
+        if (invocation.globalWorkSize() != null) {
+            execution = new OpenClPreparedExecution(
+                    execution.compiledKernel(),
+                    execution.bufferBindings(),
+                    execution.localBindings(),
+                    execution.scalarBindings(),
+                    execution.argumentBindings(),
+                    invocation.globalWorkSize()
+            );
+        }
+        executeKernelChecked(execution);
     }
 
     /**
@@ -1373,6 +1384,8 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                 "Unsupported OpenCL upload source type: "
                         + binding.sourceArray().getClass().getName()
                         + "; use supported primitive arrays, vector arrays, struct arrays, or image/sampler wrappers"
+                        + "; for packed structs use @GPUStruct[] and for vectors use wrapper arrays like Float2[] or UInt8[]"
+                        + "; see docs/gpu-diagnostics-guide.md"
         );
     }
 
@@ -1495,6 +1508,8 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
                 "Unsupported OpenCL readback target type: "
                         + binding.sourceArray().getClass().getName()
                         + "; use supported primitive arrays, vector arrays, struct arrays, or image wrappers"
+                        + "; for packed structs use @GPUStruct[] and for vectors use wrapper arrays like Float2[] or UInt8[]"
+                        + "; see docs/gpu-diagnostics-guide.md"
         );
     }
 
@@ -1614,8 +1629,19 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
         );
     }
 
-    private void validateInvocationPreconditions(GpuKernelDescriptor descriptor, OpenClExecutionPlan plan) {
-        resolvePlannedGlobalWorkSize(descriptor.kernelName(), plan.bufferBindings());
+    private void validateInvocationPreconditions(GpuKernelInvocation invocation, OpenClExecutionPlan plan) {
+        if (invocation.globalWorkSize() != null) {
+            if (invocation.globalWorkSize() <= 0L) {
+                throw new IllegalArgumentException(
+                        "Explicit global work size must be positive for kernel "
+                                + invocation.descriptor().kernelName()
+                                + ": "
+                                + invocation.globalWorkSize()
+                );
+            }
+            return;
+        }
+        resolvePlannedGlobalWorkSize(invocation.descriptor().kernelName(), plan.bufferBindings());
     }
 
     private void validateCapabilitySupport(GpuKernelDescriptor descriptor, OpenClExecutionPlan plan) {
@@ -1742,6 +1768,9 @@ public class OpenClGpuRuntimeBackend implements GpuRuntimeBackend, AutoCloseable
     }
 
     private long resolveGlobalWorkSize(OpenClPreparedExecution execution) {
+        if (execution.explicitGlobalWorkSize() != null) {
+            return execution.explicitGlobalWorkSize();
+        }
         return resolveGlobalWorkSize(execution.compiledKernel().descriptor().kernelName(), execution.bufferBindings());
     }
 

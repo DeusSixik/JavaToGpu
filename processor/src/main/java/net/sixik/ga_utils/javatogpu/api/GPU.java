@@ -1103,6 +1103,126 @@ public final class GPU {
         return new Double4(tan(value.x), tan(value.y), tan(value.z), tan(value.w));
     }
 
+    @GPUIntrinsic(name = "sinh")
+    public static float sinh(float value) {
+        return (float) Math.sinh(value);
+    }
+
+    @GPUIntrinsic(code = "sinh({0})")
+    public static Float2 sinh(Float2 value) {
+        return new Float2(sinh(value.x), sinh(value.y));
+    }
+
+    @GPUIntrinsic(code = "sinh({0})")
+    public static Float3 sinh(Float3 value) {
+        return new Float3(sinh(value.x), sinh(value.y), sinh(value.z));
+    }
+
+    @GPUIntrinsic(code = "sinh({0})")
+    public static Float4 sinh(Float4 value) {
+        return new Float4(sinh(value.x), sinh(value.y), sinh(value.z), sinh(value.w));
+    }
+
+    @GPUIntrinsic(name = "sinh")
+    public static double sinh(double value) {
+        return Math.sinh(value);
+    }
+
+    @GPUIntrinsic(code = "sinh({0})")
+    public static Double2 sinh(Double2 value) {
+        return new Double2(sinh(value.x), sinh(value.y));
+    }
+
+    @GPUIntrinsic(code = "sinh({0})")
+    public static Double3 sinh(Double3 value) {
+        return new Double3(sinh(value.x), sinh(value.y), sinh(value.z));
+    }
+
+    @GPUIntrinsic(code = "sinh({0})")
+    public static Double4 sinh(Double4 value) {
+        return new Double4(sinh(value.x), sinh(value.y), sinh(value.z), sinh(value.w));
+    }
+
+    @GPUIntrinsic(name = "cosh")
+    public static float cosh(float value) {
+        return (float) Math.cosh(value);
+    }
+
+    @GPUIntrinsic(code = "cosh({0})")
+    public static Float2 cosh(Float2 value) {
+        return new Float2(cosh(value.x), cosh(value.y));
+    }
+
+    @GPUIntrinsic(code = "cosh({0})")
+    public static Float3 cosh(Float3 value) {
+        return new Float3(cosh(value.x), cosh(value.y), cosh(value.z));
+    }
+
+    @GPUIntrinsic(code = "cosh({0})")
+    public static Float4 cosh(Float4 value) {
+        return new Float4(cosh(value.x), cosh(value.y), cosh(value.z), cosh(value.w));
+    }
+
+    @GPUIntrinsic(name = "cosh")
+    public static double cosh(double value) {
+        return Math.cosh(value);
+    }
+
+    @GPUIntrinsic(code = "cosh({0})")
+    public static Double2 cosh(Double2 value) {
+        return new Double2(cosh(value.x), cosh(value.y));
+    }
+
+    @GPUIntrinsic(code = "cosh({0})")
+    public static Double3 cosh(Double3 value) {
+        return new Double3(cosh(value.x), cosh(value.y), cosh(value.z));
+    }
+
+    @GPUIntrinsic(code = "cosh({0})")
+    public static Double4 cosh(Double4 value) {
+        return new Double4(cosh(value.x), cosh(value.y), cosh(value.z), cosh(value.w));
+    }
+
+    @GPUIntrinsic(name = "tanh")
+    public static float tanh(float value) {
+        return (float) Math.tanh(value);
+    }
+
+    @GPUIntrinsic(code = "tanh({0})")
+    public static Float2 tanh(Float2 value) {
+        return new Float2(tanh(value.x), tanh(value.y));
+    }
+
+    @GPUIntrinsic(code = "tanh({0})")
+    public static Float3 tanh(Float3 value) {
+        return new Float3(tanh(value.x), tanh(value.y), tanh(value.z));
+    }
+
+    @GPUIntrinsic(code = "tanh({0})")
+    public static Float4 tanh(Float4 value) {
+        return new Float4(tanh(value.x), tanh(value.y), tanh(value.z), tanh(value.w));
+    }
+
+    @GPUIntrinsic(name = "tanh")
+    public static double tanh(double value) {
+        return Math.tanh(value);
+    }
+
+    @GPUIntrinsic(code = "tanh({0})")
+    public static Double2 tanh(Double2 value) {
+        return new Double2(tanh(value.x), tanh(value.y));
+    }
+
+    @GPUIntrinsic(code = "tanh({0})")
+    public static Double3 tanh(Double3 value) {
+        return new Double3(tanh(value.x), tanh(value.y), tanh(value.z));
+    }
+
+    @GPUIntrinsic(code = "tanh({0})")
+    public static Double4 tanh(Double4 value) {
+        return new Double4(tanh(value.x), tanh(value.y), tanh(value.z), tanh(value.w));
+    }
+
     @GPUIntrinsic(name = "asin")
     public static float asin(float value) {
         return (float) Math.asin(value);
@@ -1268,6 +1388,26 @@ public final class GPU {
         return (float) Math.sqrt(value);
     }
 
+    @GPUIntrinsic(name = "cbrt")
+    public static float cbrt(float value) {
+        return (float) Math.cbrt(value);
+    }
+
+    @GPUIntrinsic(code = "cbrt({0})")
+    public static Float2 cbrt(Float2 value) {
+        return new Float2(cbrt(value.x), cbrt(value.y));
+    }
+
+    @GPUIntrinsic(code = "cbrt({0})")
+    public static Float3 cbrt(Float3 value) {
+        return new Float3(cbrt(value.x), cbrt(value.y), cbrt(value.z));
+    }
+
+    @GPUIntrinsic(code = "cbrt({0})")
+    public static Float4 cbrt(Float4 value) {
+        return new Float4(cbrt(value.x), cbrt(value.y), cbrt(value.z), cbrt(value.w));
+    }
+
     @GPUIntrinsic(code = "sqrt({0})")
     public static Float2 sqrt(Float2 value) {
         return new Float2(sqrt(value.x), sqrt(value.y));
@@ -1286,6 +1426,26 @@ public final class GPU {
     @GPUIntrinsic(name = "sqrt")
     public static double sqrt(double value) {
         return Math.sqrt(value);
+    }
+
+    @GPUIntrinsic(name = "cbrt")
+    public static double cbrt(double value) {
+        return Math.cbrt(value);
+    }
+
+    @GPUIntrinsic(code = "cbrt({0})")
+    public static Double2 cbrt(Double2 value) {
+        return new Double2(cbrt(value.x), cbrt(value.y));
+    }
+
+    @GPUIntrinsic(code = "cbrt({0})")
+    public static Double3 cbrt(Double3 value) {
+        return new Double3(cbrt(value.x), cbrt(value.y), cbrt(value.z));
+    }
+
+    @GPUIntrinsic(code = "cbrt({0})")
+    public static Double4 cbrt(Double4 value) {
+        return new Double4(cbrt(value.x), cbrt(value.y), cbrt(value.z), cbrt(value.w));
     }
 
     @GPUIntrinsic(code = "sqrt({0})")
@@ -1308,6 +1468,26 @@ public final class GPU {
         return (float) Math.exp(value);
     }
 
+    @GPUIntrinsic(name = "exp2")
+    public static float exp2(float value) {
+        return (float) Math.pow(2.0, value);
+    }
+
+    @GPUIntrinsic(code = "exp2({0})")
+    public static Float2 exp2(Float2 value) {
+        return new Float2(exp2(value.x), exp2(value.y));
+    }
+
+    @GPUIntrinsic(code = "exp2({0})")
+    public static Float3 exp2(Float3 value) {
+        return new Float3(exp2(value.x), exp2(value.y), exp2(value.z));
+    }
+
+    @GPUIntrinsic(code = "exp2({0})")
+    public static Float4 exp2(Float4 value) {
+        return new Float4(exp2(value.x), exp2(value.y), exp2(value.z), exp2(value.w));
+    }
+
     @GPUIntrinsic(code = "exp({0})")
     public static Float2 exp(Float2 value) {
         return new Float2(exp(value.x), exp(value.y));
@@ -1326,6 +1506,26 @@ public final class GPU {
     @GPUIntrinsic(name = "exp")
     public static double exp(double value) {
         return Math.exp(value);
+    }
+
+    @GPUIntrinsic(name = "exp2")
+    public static double exp2(double value) {
+        return Math.pow(2.0, value);
+    }
+
+    @GPUIntrinsic(code = "exp2({0})")
+    public static Double2 exp2(Double2 value) {
+        return new Double2(exp2(value.x), exp2(value.y));
+    }
+
+    @GPUIntrinsic(code = "exp2({0})")
+    public static Double3 exp2(Double3 value) {
+        return new Double3(exp2(value.x), exp2(value.y), exp2(value.z));
+    }
+
+    @GPUIntrinsic(code = "exp2({0})")
+    public static Double4 exp2(Double4 value) {
+        return new Double4(exp2(value.x), exp2(value.y), exp2(value.z), exp2(value.w));
     }
 
     @GPUIntrinsic(code = "exp({0})")
@@ -1348,6 +1548,26 @@ public final class GPU {
         return (float) Math.log(value);
     }
 
+    @GPUIntrinsic(name = "log10")
+    public static float log10(float value) {
+        return (float) Math.log10(value);
+    }
+
+    @GPUIntrinsic(code = "log10({0})")
+    public static Float2 log10(Float2 value) {
+        return new Float2(log10(value.x), log10(value.y));
+    }
+
+    @GPUIntrinsic(code = "log10({0})")
+    public static Float3 log10(Float3 value) {
+        return new Float3(log10(value.x), log10(value.y), log10(value.z));
+    }
+
+    @GPUIntrinsic(code = "log10({0})")
+    public static Float4 log10(Float4 value) {
+        return new Float4(log10(value.x), log10(value.y), log10(value.z), log10(value.w));
+    }
+
     @GPUIntrinsic(code = "log({0})")
     public static Float2 log(Float2 value) {
         return new Float2(log(value.x), log(value.y));
@@ -1366,6 +1586,26 @@ public final class GPU {
     @GPUIntrinsic(name = "log")
     public static double log(double value) {
         return Math.log(value);
+    }
+
+    @GPUIntrinsic(name = "log10")
+    public static double log10(double value) {
+        return Math.log10(value);
+    }
+
+    @GPUIntrinsic(code = "log10({0})")
+    public static Double2 log10(Double2 value) {
+        return new Double2(log10(value.x), log10(value.y));
+    }
+
+    @GPUIntrinsic(code = "log10({0})")
+    public static Double3 log10(Double3 value) {
+        return new Double3(log10(value.x), log10(value.y), log10(value.z));
+    }
+
+    @GPUIntrinsic(code = "log10({0})")
+    public static Double4 log10(Double4 value) {
+        return new Double4(log10(value.x), log10(value.y), log10(value.z), log10(value.w));
     }
 
     @GPUIntrinsic(code = "log({0})")
@@ -1711,6 +1951,286 @@ public final class GPU {
     @GPUIntrinsic(code = "pow({0}, {1})")
     public static Double4 pow(Double4 left, Double4 right) {
         return new Double4(pow(left.x, right.x), pow(left.y, right.y), pow(left.z, right.z), pow(left.w, right.w));
+    }
+
+    @GPUIntrinsic(name = "pown")
+    public static float pown(float value, int exponent) {
+        return (float) Math.pow(value, exponent);
+    }
+
+    @GPUIntrinsic(code = "pown({0}, {1})")
+    public static Float2 pown(Float2 value, Int2 exponent) {
+        return new Float2(pown(value.x, exponent.x), pown(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "pown({0}, {1})")
+    public static Float3 pown(Float3 value, Int3 exponent) {
+        return new Float3(pown(value.x, exponent.x), pown(value.y, exponent.y), pown(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "pown({0}, {1})")
+    public static Float4 pown(Float4 value, Int4 exponent) {
+        return new Float4(pown(value.x, exponent.x), pown(value.y, exponent.y), pown(value.z, exponent.z), pown(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "pown")
+    public static double pown(double value, int exponent) {
+        return Math.pow(value, exponent);
+    }
+
+    @GPUIntrinsic(code = "pown({0}, {1})")
+    public static Double2 pown(Double2 value, Int2 exponent) {
+        return new Double2(pown(value.x, exponent.x), pown(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "pown({0}, {1})")
+    public static Double3 pown(Double3 value, Int3 exponent) {
+        return new Double3(pown(value.x, exponent.x), pown(value.y, exponent.y), pown(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "pown({0}, {1})")
+    public static Double4 pown(Double4 value, Int4 exponent) {
+        return new Double4(pown(value.x, exponent.x), pown(value.y, exponent.y), pown(value.z, exponent.z), pown(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "rootn")
+    public static float rootn(float value, int exponent) {
+        return (float) Math.pow(value, 1.0f / exponent);
+    }
+
+    @GPUIntrinsic(code = "rootn({0}, {1})")
+    public static Float2 rootn(Float2 value, Int2 exponent) {
+        return new Float2(rootn(value.x, exponent.x), rootn(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "rootn({0}, {1})")
+    public static Float3 rootn(Float3 value, Int3 exponent) {
+        return new Float3(rootn(value.x, exponent.x), rootn(value.y, exponent.y), rootn(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "rootn({0}, {1})")
+    public static Float4 rootn(Float4 value, Int4 exponent) {
+        return new Float4(rootn(value.x, exponent.x), rootn(value.y, exponent.y), rootn(value.z, exponent.z), rootn(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "rootn")
+    public static double rootn(double value, int exponent) {
+        return Math.pow(value, 1.0 / exponent);
+    }
+
+    @GPUIntrinsic(code = "rootn({0}, {1})")
+    public static Double2 rootn(Double2 value, Int2 exponent) {
+        return new Double2(rootn(value.x, exponent.x), rootn(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "rootn({0}, {1})")
+    public static Double3 rootn(Double3 value, Int3 exponent) {
+        return new Double3(rootn(value.x, exponent.x), rootn(value.y, exponent.y), rootn(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "rootn({0}, {1})")
+    public static Double4 rootn(Double4 value, Int4 exponent) {
+        return new Double4(rootn(value.x, exponent.x), rootn(value.y, exponent.y), rootn(value.z, exponent.z), rootn(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "powr")
+    public static float powr(float value, float exponent) {
+        return (float) Math.pow(value, exponent);
+    }
+
+    @GPUIntrinsic(code = "powr({0}, {1})")
+    public static Float2 powr(Float2 value, Float2 exponent) {
+        return new Float2(powr(value.x, exponent.x), powr(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "powr({0}, {1})")
+    public static Float3 powr(Float3 value, Float3 exponent) {
+        return new Float3(powr(value.x, exponent.x), powr(value.y, exponent.y), powr(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "powr({0}, {1})")
+    public static Float4 powr(Float4 value, Float4 exponent) {
+        return new Float4(powr(value.x, exponent.x), powr(value.y, exponent.y), powr(value.z, exponent.z), powr(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "powr")
+    public static double powr(double value, double exponent) {
+        return Math.pow(value, exponent);
+    }
+
+    @GPUIntrinsic(code = "powr({0}, {1})")
+    public static Double2 powr(Double2 value, Double2 exponent) {
+        return new Double2(powr(value.x, exponent.x), powr(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "powr({0}, {1})")
+    public static Double3 powr(Double3 value, Double3 exponent) {
+        return new Double3(powr(value.x, exponent.x), powr(value.y, exponent.y), powr(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "powr({0}, {1})")
+    public static Double4 powr(Double4 value, Double4 exponent) {
+        return new Double4(powr(value.x, exponent.x), powr(value.y, exponent.y), powr(value.z, exponent.z), powr(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "fmod")
+    public static float fmod(float left, float right) {
+        return left % right;
+    }
+
+    @GPUIntrinsic(code = "fmod({0}, {1})")
+    public static Float2 fmod(Float2 left, Float2 right) {
+        return new Float2(fmod(left.x, right.x), fmod(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "fmod({0}, {1})")
+    public static Float3 fmod(Float3 left, Float3 right) {
+        return new Float3(fmod(left.x, right.x), fmod(left.y, right.y), fmod(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "fmod({0}, {1})")
+    public static Float4 fmod(Float4 left, Float4 right) {
+        return new Float4(fmod(left.x, right.x), fmod(left.y, right.y), fmod(left.z, right.z), fmod(left.w, right.w));
+    }
+
+    @GPUIntrinsic(name = "fmod")
+    public static double fmod(double left, double right) {
+        return left % right;
+    }
+
+    @GPUIntrinsic(code = "fmod({0}, {1})")
+    public static Double2 fmod(Double2 left, Double2 right) {
+        return new Double2(fmod(left.x, right.x), fmod(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "fmod({0}, {1})")
+    public static Double3 fmod(Double3 left, Double3 right) {
+        return new Double3(fmod(left.x, right.x), fmod(left.y, right.y), fmod(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "fmod({0}, {1})")
+    public static Double4 fmod(Double4 left, Double4 right) {
+        return new Double4(fmod(left.x, right.x), fmod(left.y, right.y), fmod(left.z, right.z), fmod(left.w, right.w));
+    }
+
+    @GPUIntrinsic(name = "remainder")
+    public static float remainder(float left, float right) {
+        return (float) Math.IEEEremainder(left, right);
+    }
+
+    @GPUIntrinsic(code = "remainder({0}, {1})")
+    public static Float2 remainder(Float2 left, Float2 right) {
+        return new Float2(remainder(left.x, right.x), remainder(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "remainder({0}, {1})")
+    public static Float3 remainder(Float3 left, Float3 right) {
+        return new Float3(remainder(left.x, right.x), remainder(left.y, right.y), remainder(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "remainder({0}, {1})")
+    public static Float4 remainder(Float4 left, Float4 right) {
+        return new Float4(remainder(left.x, right.x), remainder(left.y, right.y), remainder(left.z, right.z), remainder(left.w, right.w));
+    }
+
+    @GPUIntrinsic(name = "remainder")
+    public static double remainder(double left, double right) {
+        return Math.IEEEremainder(left, right);
+    }
+
+    @GPUIntrinsic(code = "remainder({0}, {1})")
+    public static Double2 remainder(Double2 left, Double2 right) {
+        return new Double2(remainder(left.x, right.x), remainder(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "remainder({0}, {1})")
+    public static Double3 remainder(Double3 left, Double3 right) {
+        return new Double3(remainder(left.x, right.x), remainder(left.y, right.y), remainder(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "remainder({0}, {1})")
+    public static Double4 remainder(Double4 left, Double4 right) {
+        return new Double4(remainder(left.x, right.x), remainder(left.y, right.y), remainder(left.z, right.z), remainder(left.w, right.w));
+    }
+
+    @GPUIntrinsic(name = "nextafter")
+    public static float nextafter(float start, float direction) {
+        return Math.nextAfter(start, direction);
+    }
+
+    @GPUIntrinsic(code = "nextafter({0}, {1})")
+    public static Float2 nextafter(Float2 start, Float2 direction) {
+        return new Float2(nextafter(start.x, direction.x), nextafter(start.y, direction.y));
+    }
+
+    @GPUIntrinsic(code = "nextafter({0}, {1})")
+    public static Float3 nextafter(Float3 start, Float3 direction) {
+        return new Float3(nextafter(start.x, direction.x), nextafter(start.y, direction.y), nextafter(start.z, direction.z));
+    }
+
+    @GPUIntrinsic(code = "nextafter({0}, {1})")
+    public static Float4 nextafter(Float4 start, Float4 direction) {
+        return new Float4(nextafter(start.x, direction.x), nextafter(start.y, direction.y), nextafter(start.z, direction.z), nextafter(start.w, direction.w));
+    }
+
+    @GPUIntrinsic(name = "nextafter")
+    public static double nextafter(double start, double direction) {
+        return Math.nextAfter(start, direction);
+    }
+
+    @GPUIntrinsic(code = "nextafter({0}, {1})")
+    public static Double2 nextafter(Double2 start, Double2 direction) {
+        return new Double2(nextafter(start.x, direction.x), nextafter(start.y, direction.y));
+    }
+
+    @GPUIntrinsic(code = "nextafter({0}, {1})")
+    public static Double3 nextafter(Double3 start, Double3 direction) {
+        return new Double3(nextafter(start.x, direction.x), nextafter(start.y, direction.y), nextafter(start.z, direction.z));
+    }
+
+    @GPUIntrinsic(code = "nextafter({0}, {1})")
+    public static Double4 nextafter(Double4 start, Double4 direction) {
+        return new Double4(nextafter(start.x, direction.x), nextafter(start.y, direction.y), nextafter(start.z, direction.z), nextafter(start.w, direction.w));
+    }
+
+    @GPUIntrinsic(name = "ldexp")
+    public static float ldexp(float value, int exponent) {
+        return Math.scalb(value, exponent);
+    }
+
+    @GPUIntrinsic(code = "ldexp({0}, {1})")
+    public static Float2 ldexp(Float2 value, Int2 exponent) {
+        return new Float2(ldexp(value.x, exponent.x), ldexp(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "ldexp({0}, {1})")
+    public static Float3 ldexp(Float3 value, Int3 exponent) {
+        return new Float3(ldexp(value.x, exponent.x), ldexp(value.y, exponent.y), ldexp(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "ldexp({0}, {1})")
+    public static Float4 ldexp(Float4 value, Int4 exponent) {
+        return new Float4(ldexp(value.x, exponent.x), ldexp(value.y, exponent.y), ldexp(value.z, exponent.z), ldexp(value.w, exponent.w));
+    }
+
+    @GPUIntrinsic(name = "ldexp")
+    public static double ldexp(double value, int exponent) {
+        return Math.scalb(value, exponent);
+    }
+
+    @GPUIntrinsic(code = "ldexp({0}, {1})")
+    public static Double2 ldexp(Double2 value, Int2 exponent) {
+        return new Double2(ldexp(value.x, exponent.x), ldexp(value.y, exponent.y));
+    }
+
+    @GPUIntrinsic(code = "ldexp({0}, {1})")
+    public static Double3 ldexp(Double3 value, Int3 exponent) {
+        return new Double3(ldexp(value.x, exponent.x), ldexp(value.y, exponent.y), ldexp(value.z, exponent.z));
+    }
+
+    @GPUIntrinsic(code = "ldexp({0}, {1})")
+    public static Double4 ldexp(Double4 value, Int4 exponent) {
+        return new Double4(ldexp(value.x, exponent.x), ldexp(value.y, exponent.y), ldexp(value.z, exponent.z), ldexp(value.w, exponent.w));
     }
 
     @GPUIntrinsic(name = "min")
@@ -2129,6 +2649,46 @@ public final class GPU {
     @GPUIntrinsic(code = "mad({0}, {1}, {2})")
     public static Double4 mad(Double4 a, Double4 b, Double4 c) {
         return new Double4(mad(a.x, b.x, c.x), mad(a.y, b.y, c.y), mad(a.z, b.z, c.z), mad(a.w, b.w, c.w));
+    }
+
+    @GPUIntrinsic(name = "fma")
+    public static float fma(float a, float b, float c) {
+        return Math.fma(a, b, c);
+    }
+
+    @GPUIntrinsic(name = "fma")
+    public static double fma(double a, double b, double c) {
+        return Math.fma(a, b, c);
+    }
+
+    @GPUIntrinsic(code = "fma({0}, {1}, {2})")
+    public static Float2 fma(Float2 a, Float2 b, Float2 c) {
+        return new Float2(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y));
+    }
+
+    @GPUIntrinsic(code = "fma({0}, {1}, {2})")
+    public static Float3 fma(Float3 a, Float3 b, Float3 c) {
+        return new Float3(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y), fma(a.z, b.z, c.z));
+    }
+
+    @GPUIntrinsic(code = "fma({0}, {1}, {2})")
+    public static Float4 fma(Float4 a, Float4 b, Float4 c) {
+        return new Float4(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y), fma(a.z, b.z, c.z), fma(a.w, b.w, c.w));
+    }
+
+    @GPUIntrinsic(code = "fma({0}, {1}, {2})")
+    public static Double2 fma(Double2 a, Double2 b, Double2 c) {
+        return new Double2(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y));
+    }
+
+    @GPUIntrinsic(code = "fma({0}, {1}, {2})")
+    public static Double3 fma(Double3 a, Double3 b, Double3 c) {
+        return new Double3(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y), fma(a.z, b.z, c.z));
+    }
+
+    @GPUIntrinsic(code = "fma({0}, {1}, {2})")
+    public static Double4 fma(Double4 a, Double4 b, Double4 c) {
+        return new Double4(fma(a.x, b.x, c.x), fma(a.y, b.y, c.y), fma(a.z, b.z, c.z), fma(a.w, b.w, c.w));
     }
 
     @GPUIntrinsic(name = "mul24")
@@ -2642,6 +3202,36 @@ public final class GPU {
     }
 
     @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
+    public static Byte2 clamp(Byte2 value, Byte2 minValue, Byte2 maxValue) {
+        return new Byte2((byte) clamp(value.x, minValue.x, maxValue.x), (byte) clamp(value.y, minValue.y, maxValue.y));
+    }
+
+    @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
+    public static Byte3 clamp(Byte3 value, Byte3 minValue, Byte3 maxValue) {
+        return new Byte3((byte) clamp(value.x, minValue.x, maxValue.x), (byte) clamp(value.y, minValue.y, maxValue.y), (byte) clamp(value.z, minValue.z, maxValue.z));
+    }
+
+    @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
+    public static Byte4 clamp(Byte4 value, Byte4 minValue, Byte4 maxValue) {
+        return new Byte4((byte) clamp(value.x, minValue.x, maxValue.x), (byte) clamp(value.y, minValue.y, maxValue.y), (byte) clamp(value.z, minValue.z, maxValue.z), (byte) clamp(value.w, minValue.w, maxValue.w));
+    }
+
+    @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
+    public static Short2 clamp(Short2 value, Short2 minValue, Short2 maxValue) {
+        return new Short2((short) clamp(value.x, minValue.x, maxValue.x), (short) clamp(value.y, minValue.y, maxValue.y));
+    }
+
+    @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
+    public static Short3 clamp(Short3 value, Short3 minValue, Short3 maxValue) {
+        return new Short3((short) clamp(value.x, minValue.x, maxValue.x), (short) clamp(value.y, minValue.y, maxValue.y), (short) clamp(value.z, minValue.z, maxValue.z));
+    }
+
+    @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
+    public static Short4 clamp(Short4 value, Short4 minValue, Short4 maxValue) {
+        return new Short4((short) clamp(value.x, minValue.x, maxValue.x), (short) clamp(value.y, minValue.y, maxValue.y), (short) clamp(value.z, minValue.z, maxValue.z), (short) clamp(value.w, minValue.w, maxValue.w));
+    }
+
+    @GPUIntrinsic(code = "clamp({0}, {1}, {2})")
     public static Long2 clamp(Long2 value, Long2 minValue, Long2 maxValue) {
         return new Long2(clamp(value.x, minValue.x, maxValue.x), clamp(value.y, minValue.y, maxValue.y));
     }
@@ -3004,6 +3594,36 @@ public final class GPU {
     }
 
     @GPUIntrinsic(code = "min({0}, {1})")
+    public static Byte2 min(Byte2 left, Byte2 right) {
+        return new Byte2((byte) min(left.x, right.x), (byte) min(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "min({0}, {1})")
+    public static Byte3 min(Byte3 left, Byte3 right) {
+        return new Byte3((byte) min(left.x, right.x), (byte) min(left.y, right.y), (byte) min(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "min({0}, {1})")
+    public static Byte4 min(Byte4 left, Byte4 right) {
+        return new Byte4((byte) min(left.x, right.x), (byte) min(left.y, right.y), (byte) min(left.z, right.z), (byte) min(left.w, right.w));
+    }
+
+    @GPUIntrinsic(code = "min({0}, {1})")
+    public static Short2 min(Short2 left, Short2 right) {
+        return new Short2((short) min(left.x, right.x), (short) min(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "min({0}, {1})")
+    public static Short3 min(Short3 left, Short3 right) {
+        return new Short3((short) min(left.x, right.x), (short) min(left.y, right.y), (short) min(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "min({0}, {1})")
+    public static Short4 min(Short4 left, Short4 right) {
+        return new Short4((short) min(left.x, right.x), (short) min(left.y, right.y), (short) min(left.z, right.z), (short) min(left.w, right.w));
+    }
+
+    @GPUIntrinsic(code = "min({0}, {1})")
     public static Int3 min(Int3 left, Int3 right) {
         return new Int3(min(left.x, right.x), min(left.y, right.y), min(left.z, right.z));
     }
@@ -3131,6 +3751,36 @@ public final class GPU {
     @GPUIntrinsic(code = "max({0}, {1})")
     public static Int2 max(Int2 left, Int2 right) {
         return new Int2(max(left.x, right.x), max(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "max({0}, {1})")
+    public static Byte2 max(Byte2 left, Byte2 right) {
+        return new Byte2((byte) max(left.x, right.x), (byte) max(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "max({0}, {1})")
+    public static Byte3 max(Byte3 left, Byte3 right) {
+        return new Byte3((byte) max(left.x, right.x), (byte) max(left.y, right.y), (byte) max(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "max({0}, {1})")
+    public static Byte4 max(Byte4 left, Byte4 right) {
+        return new Byte4((byte) max(left.x, right.x), (byte) max(left.y, right.y), (byte) max(left.z, right.z), (byte) max(left.w, right.w));
+    }
+
+    @GPUIntrinsic(code = "max({0}, {1})")
+    public static Short2 max(Short2 left, Short2 right) {
+        return new Short2((short) max(left.x, right.x), (short) max(left.y, right.y));
+    }
+
+    @GPUIntrinsic(code = "max({0}, {1})")
+    public static Short3 max(Short3 left, Short3 right) {
+        return new Short3((short) max(left.x, right.x), (short) max(left.y, right.y), (short) max(left.z, right.z));
+    }
+
+    @GPUIntrinsic(code = "max({0}, {1})")
+    public static Short4 max(Short4 left, Short4 right) {
+        return new Short4((short) max(left.x, right.x), (short) max(left.y, right.y), (short) max(left.z, right.z), (short) max(left.w, right.w));
     }
 
     @GPUIntrinsic(code = "max({0}, {1})")
@@ -3526,8 +4176,48 @@ public final class GPU {
     }
 
     @GPUIntrinsic(name = "hypot")
+    public static float hypot(float x, float y) {
+        return (float) Math.hypot(x, y);
+    }
+
+    @GPUIntrinsic(name = "hypot")
     public static double length(double x, double y) {
         return Math.hypot(x, y);
+    }
+
+    @GPUIntrinsic(name = "hypot")
+    public static double hypot(double x, double y) {
+        return Math.hypot(x, y);
+    }
+
+    @GPUIntrinsic(code = "hypot({0}, {1})")
+    public static Float2 hypot(Float2 x, Float2 y) {
+        return new Float2(hypot(x.x, y.x), hypot(x.y, y.y));
+    }
+
+    @GPUIntrinsic(code = "hypot({0}, {1})")
+    public static Float3 hypot(Float3 x, Float3 y) {
+        return new Float3(hypot(x.x, y.x), hypot(x.y, y.y), hypot(x.z, y.z));
+    }
+
+    @GPUIntrinsic(code = "hypot({0}, {1})")
+    public static Float4 hypot(Float4 x, Float4 y) {
+        return new Float4(hypot(x.x, y.x), hypot(x.y, y.y), hypot(x.z, y.z), hypot(x.w, y.w));
+    }
+
+    @GPUIntrinsic(code = "hypot({0}, {1})")
+    public static Double2 hypot(Double2 x, Double2 y) {
+        return new Double2(hypot(x.x, y.x), hypot(x.y, y.y));
+    }
+
+    @GPUIntrinsic(code = "hypot({0}, {1})")
+    public static Double3 hypot(Double3 x, Double3 y) {
+        return new Double3(hypot(x.x, y.x), hypot(x.y, y.y), hypot(x.z, y.z));
+    }
+
+    @GPUIntrinsic(code = "hypot({0}, {1})")
+    public static Double4 hypot(Double4 x, Double4 y) {
+        return new Double4(hypot(x.x, y.x), hypot(x.y, y.y), hypot(x.z, y.z), hypot(x.w, y.w));
     }
 
     @GPUIntrinsic(code = "sqrt(dot({0}, {0}))")
@@ -4139,6 +4829,126 @@ public final class GPU {
         return (float) value.value;
     }
 
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(Byte2 value) {
+        return new Float2(convert_float(value.x), convert_float(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(Byte3 value) {
+        return new Float3(convert_float(value.x), convert_float(value.y), convert_float(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(Byte4 value) {
+        return new Float4(convert_float(value.x), convert_float(value.y), convert_float(value.z), convert_float(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(Short2 value) {
+        return new Float2(convert_float(value.x), convert_float(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(Short3 value) {
+        return new Float3(convert_float(value.x), convert_float(value.y), convert_float(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(Short4 value) {
+        return new Float4(convert_float(value.x), convert_float(value.y), convert_float(value.z), convert_float(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(Int2 value) {
+        return new Float2(convert_float(value.x), convert_float(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(Int3 value) {
+        return new Float3(convert_float(value.x), convert_float(value.y), convert_float(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(Int4 value) {
+        return new Float4(convert_float(value.x), convert_float(value.y), convert_float(value.z), convert_float(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(Long2 value) {
+        return new Float2(convert_float(value.x), convert_float(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(Long3 value) {
+        return new Float3(convert_float(value.x), convert_float(value.y), convert_float(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(Long4 value) {
+        return new Float4(convert_float(value.x), convert_float(value.y), convert_float(value.z), convert_float(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(UByte2 value) {
+        return new Float2(convert_float(new UByte(value.x)), convert_float(new UByte(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(UByte3 value) {
+        return new Float3(convert_float(new UByte(value.x)), convert_float(new UByte(value.y)), convert_float(new UByte(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(UByte4 value) {
+        return new Float4(convert_float(new UByte(value.x)), convert_float(new UByte(value.y)), convert_float(new UByte(value.z)), convert_float(new UByte(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(UShort2 value) {
+        return new Float2(convert_float(new UShort(value.x)), convert_float(new UShort(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(UShort3 value) {
+        return new Float3(convert_float(new UShort(value.x)), convert_float(new UShort(value.y)), convert_float(new UShort(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(UShort4 value) {
+        return new Float4(convert_float(new UShort(value.x)), convert_float(new UShort(value.y)), convert_float(new UShort(value.z)), convert_float(new UShort(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(UInt2 value) {
+        return new Float2(convert_float(new UInt(value.x)), convert_float(new UInt(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(UInt3 value) {
+        return new Float3(convert_float(new UInt(value.x)), convert_float(new UInt(value.y)), convert_float(new UInt(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(UInt4 value) {
+        return new Float4(convert_float(new UInt(value.x)), convert_float(new UInt(value.y)), convert_float(new UInt(value.z)), convert_float(new UInt(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float2 convert_float(ULong2 value) {
+        return new Float2(convert_float(new ULong(value.x)), convert_float(new ULong(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float3 convert_float(ULong3 value) {
+        return new Float3(convert_float(new ULong(value.x)), convert_float(new ULong(value.y)), convert_float(new ULong(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_float")
+    public static Float4 convert_float(ULong4 value) {
+        return new Float4(convert_float(new ULong(value.x)), convert_float(new ULong(value.y)), convert_float(new ULong(value.z)), convert_float(new ULong(value.w)));
+    }
+
     @GPUIntrinsic(name = "convert_double")
     public static double convert_double(byte value) {
         return value;
@@ -4194,6 +5004,246 @@ public final class GPU {
         return value.value;
     }
 
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(Byte2 value) {
+        return new Double2(convert_double(value.x), convert_double(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(Byte3 value) {
+        return new Double3(convert_double(value.x), convert_double(value.y), convert_double(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(Byte4 value) {
+        return new Double4(convert_double(value.x), convert_double(value.y), convert_double(value.z), convert_double(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(Short2 value) {
+        return new Double2(convert_double(value.x), convert_double(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(Short3 value) {
+        return new Double3(convert_double(value.x), convert_double(value.y), convert_double(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(Short4 value) {
+        return new Double4(convert_double(value.x), convert_double(value.y), convert_double(value.z), convert_double(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(Int2 value) {
+        return new Double2(convert_double(value.x), convert_double(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(Int3 value) {
+        return new Double3(convert_double(value.x), convert_double(value.y), convert_double(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(Int4 value) {
+        return new Double4(convert_double(value.x), convert_double(value.y), convert_double(value.z), convert_double(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(Long2 value) {
+        return new Double2(convert_double(value.x), convert_double(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(Long3 value) {
+        return new Double3(convert_double(value.x), convert_double(value.y), convert_double(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(Long4 value) {
+        return new Double4(convert_double(value.x), convert_double(value.y), convert_double(value.z), convert_double(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(UByte2 value) {
+        return new Double2(convert_double(new UByte(value.x)), convert_double(new UByte(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(UByte3 value) {
+        return new Double3(convert_double(new UByte(value.x)), convert_double(new UByte(value.y)), convert_double(new UByte(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(UByte4 value) {
+        return new Double4(convert_double(new UByte(value.x)), convert_double(new UByte(value.y)), convert_double(new UByte(value.z)), convert_double(new UByte(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(UShort2 value) {
+        return new Double2(convert_double(new UShort(value.x)), convert_double(new UShort(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(UShort3 value) {
+        return new Double3(convert_double(new UShort(value.x)), convert_double(new UShort(value.y)), convert_double(new UShort(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(UShort4 value) {
+        return new Double4(convert_double(new UShort(value.x)), convert_double(new UShort(value.y)), convert_double(new UShort(value.z)), convert_double(new UShort(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(UInt2 value) {
+        return new Double2(convert_double(new UInt(value.x)), convert_double(new UInt(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(UInt3 value) {
+        return new Double3(convert_double(new UInt(value.x)), convert_double(new UInt(value.y)), convert_double(new UInt(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(UInt4 value) {
+        return new Double4(convert_double(new UInt(value.x)), convert_double(new UInt(value.y)), convert_double(new UInt(value.z)), convert_double(new UInt(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double2 convert_double(ULong2 value) {
+        return new Double2(convert_double(new ULong(value.x)), convert_double(new ULong(value.y)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double3 convert_double(ULong3 value) {
+        return new Double3(convert_double(new ULong(value.x)), convert_double(new ULong(value.y)), convert_double(new ULong(value.z)));
+    }
+
+    @GPUIntrinsic(name = "convert_double")
+    public static Double4 convert_double(ULong4 value) {
+        return new Double4(convert_double(new ULong(value.x)), convert_double(new ULong(value.y)), convert_double(new ULong(value.z)), convert_double(new ULong(value.w)));
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static Int2 convert_int(Float2 value) {
+        return new Int2(convert_int(value.x), convert_int(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static Int3 convert_int(Float3 value) {
+        return new Int3(convert_int(value.x), convert_int(value.y), convert_int(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static Int4 convert_int(Float4 value) {
+        return new Int4(convert_int(value.x), convert_int(value.y), convert_int(value.z), convert_int(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static Int2 convert_int(Double2 value) {
+        return new Int2(convert_int(value.x), convert_int(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static Int3 convert_int(Double3 value) {
+        return new Int3(convert_int(value.x), convert_int(value.y), convert_int(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_int")
+    public static Int4 convert_int(Double4 value) {
+        return new Int4(convert_int(value.x), convert_int(value.y), convert_int(value.z), convert_int(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static Long2 convert_long(Float2 value) {
+        return new Long2(convert_long(value.x), convert_long(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static Long3 convert_long(Float3 value) {
+        return new Long3(convert_long(value.x), convert_long(value.y), convert_long(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static Long4 convert_long(Float4 value) {
+        return new Long4(convert_long(value.x), convert_long(value.y), convert_long(value.z), convert_long(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static Long2 convert_long(Double2 value) {
+        return new Long2(convert_long(value.x), convert_long(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static Long3 convert_long(Double3 value) {
+        return new Long3(convert_long(value.x), convert_long(value.y), convert_long(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_long")
+    public static Long4 convert_long(Double4 value) {
+        return new Long4(convert_long(value.x), convert_long(value.y), convert_long(value.z), convert_long(value.w));
+    }
+
+    @GPUIntrinsic(code = "convert_uint({0})")
+    public static UInt2 convert_uint(Float2 value) {
+        return new UInt2(convert_uint(value.x).value, convert_uint(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint({0})")
+    public static UInt3 convert_uint(Float3 value) {
+        return new UInt3(convert_uint(value.x).value, convert_uint(value.y).value, convert_uint(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint({0})")
+    public static UInt4 convert_uint(Float4 value) {
+        return new UInt4(convert_uint(value.x).value, convert_uint(value.y).value, convert_uint(value.z).value, convert_uint(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint({0})")
+    public static UInt2 convert_uint(Double2 value) {
+        return new UInt2(convert_uint(value.x).value, convert_uint(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint({0})")
+    public static UInt3 convert_uint(Double3 value) {
+        return new UInt3(convert_uint(value.x).value, convert_uint(value.y).value, convert_uint(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint({0})")
+    public static UInt4 convert_uint(Double4 value) {
+        return new UInt4(convert_uint(value.x).value, convert_uint(value.y).value, convert_uint(value.z).value, convert_uint(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong({0})")
+    public static ULong2 convert_ulong(Float2 value) {
+        return new ULong2(convert_ulong(value.x).value, convert_ulong(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong({0})")
+    public static ULong3 convert_ulong(Float3 value) {
+        return new ULong3(convert_ulong(value.x).value, convert_ulong(value.y).value, convert_ulong(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong({0})")
+    public static ULong4 convert_ulong(Float4 value) {
+        return new ULong4(convert_ulong(value.x).value, convert_ulong(value.y).value, convert_ulong(value.z).value, convert_ulong(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong({0})")
+    public static ULong2 convert_ulong(Double2 value) {
+        return new ULong2(convert_ulong(value.x).value, convert_ulong(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong({0})")
+    public static ULong3 convert_ulong(Double3 value) {
+        return new ULong3(convert_ulong(value.x).value, convert_ulong(value.y).value, convert_ulong(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong({0})")
+    public static ULong4 convert_ulong(Double4 value) {
+        return new ULong4(convert_ulong(value.x).value, convert_ulong(value.y).value, convert_ulong(value.z).value, convert_ulong(value.w).value);
+    }
+
     @GPUIntrinsic(name = "convert_char")
     public static byte convert_char(float value) {
         return (byte) value;
@@ -4212,6 +5262,71 @@ public final class GPU {
     @GPUIntrinsic(name = "convert_char")
     public static byte convert_char(long value) {
         return (byte) value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(byte value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(short value) {
+        return (byte) value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(char value) {
+        return (byte) value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(UByte value) {
+        return value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(UShort value) {
+        return (byte) value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(UInt value) {
+        return (byte) value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static byte convert_char(ULong value) {
+        return (byte) value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static Byte2 convert_char(Float2 value) {
+        return new Byte2(convert_char(value.x), convert_char(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static Byte3 convert_char(Float3 value) {
+        return new Byte3(convert_char(value.x), convert_char(value.y), convert_char(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static Byte4 convert_char(Float4 value) {
+        return new Byte4(convert_char(value.x), convert_char(value.y), convert_char(value.z), convert_char(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static Byte2 convert_char(Double2 value) {
+        return new Byte2(convert_char(value.x), convert_char(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static Byte3 convert_char(Double3 value) {
+        return new Byte3(convert_char(value.x), convert_char(value.y), convert_char(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_char")
+    public static Byte4 convert_char(Double4 value) {
+        return new Byte4(convert_char(value.x), convert_char(value.y), convert_char(value.z), convert_char(value.w));
     }
 
     @GPUIntrinsic(code = "convert_uchar({0})")
@@ -4234,6 +5349,41 @@ public final class GPU {
         return new UByte((byte) value);
     }
 
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(byte value) {
+        return new UByte(value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(short value) {
+        return new UByte((byte) value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(char value) {
+        return new UByte((byte) value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(UByte value) {
+        return value;
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(UShort value) {
+        return new UByte((byte) value.value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(UInt value) {
+        return new UByte((byte) value.value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte convert_uchar(ULong value) {
+        return new UByte((byte) value.value);
+    }
+
     @GPUIntrinsic(name = "convert_short")
     public static short convert_short(float value) {
         return (short) value;
@@ -4254,6 +5404,71 @@ public final class GPU {
         return (short) value;
     }
 
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(byte value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(short value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(char value) {
+        return (short) value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(UByte value) {
+        return (short) Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(UShort value) {
+        return value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(UInt value) {
+        return (short) value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static short convert_short(ULong value) {
+        return (short) value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static Short2 convert_short(Float2 value) {
+        return new Short2(convert_short(value.x), convert_short(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static Short3 convert_short(Float3 value) {
+        return new Short3(convert_short(value.x), convert_short(value.y), convert_short(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static Short4 convert_short(Float4 value) {
+        return new Short4(convert_short(value.x), convert_short(value.y), convert_short(value.z), convert_short(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static Short2 convert_short(Double2 value) {
+        return new Short2(convert_short(value.x), convert_short(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static Short3 convert_short(Double3 value) {
+        return new Short3(convert_short(value.x), convert_short(value.y), convert_short(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_short")
+    public static Short4 convert_short(Double4 value) {
+        return new Short4(convert_short(value.x), convert_short(value.y), convert_short(value.z), convert_short(value.w));
+    }
+
     @GPUIntrinsic(code = "convert_ushort({0})")
     public static UShort convert_ushort(float value) {
         return new UShort((short) value);
@@ -4272,6 +5487,101 @@ public final class GPU {
     @GPUIntrinsic(code = "convert_ushort({0})")
     public static UShort convert_ushort(long value) {
         return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(byte value) {
+        return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(short value) {
+        return new UShort(value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(char value) {
+        return new UShort((short) value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(UByte value) {
+        return new UShort((short) Byte.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(UShort value) {
+        return value;
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(UInt value) {
+        return new UShort((short) value.value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort convert_ushort(ULong value) {
+        return new UShort((short) value.value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte2 convert_uchar(Float2 value) {
+        return new UByte2(convert_uchar(value.x).value, convert_uchar(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte3 convert_uchar(Float3 value) {
+        return new UByte3(convert_uchar(value.x).value, convert_uchar(value.y).value, convert_uchar(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte4 convert_uchar(Float4 value) {
+        return new UByte4(convert_uchar(value.x).value, convert_uchar(value.y).value, convert_uchar(value.z).value, convert_uchar(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte2 convert_uchar(Double2 value) {
+        return new UByte2(convert_uchar(value.x).value, convert_uchar(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte3 convert_uchar(Double3 value) {
+        return new UByte3(convert_uchar(value.x).value, convert_uchar(value.y).value, convert_uchar(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar({0})")
+    public static UByte4 convert_uchar(Double4 value) {
+        return new UByte4(convert_uchar(value.x).value, convert_uchar(value.y).value, convert_uchar(value.z).value, convert_uchar(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort2 convert_ushort(Float2 value) {
+        return new UShort2(convert_ushort(value.x).value, convert_ushort(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort3 convert_ushort(Float3 value) {
+        return new UShort3(convert_ushort(value.x).value, convert_ushort(value.y).value, convert_ushort(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort4 convert_ushort(Float4 value) {
+        return new UShort4(convert_ushort(value.x).value, convert_ushort(value.y).value, convert_ushort(value.z).value, convert_ushort(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort2 convert_ushort(Double2 value) {
+        return new UShort2(convert_ushort(value.x).value, convert_ushort(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort3 convert_ushort(Double3 value) {
+        return new UShort3(convert_ushort(value.x).value, convert_ushort(value.y).value, convert_ushort(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort({0})")
+    public static UShort4 convert_ushort(Double4 value) {
+        return new UShort4(convert_ushort(value.x).value, convert_ushort(value.y).value, convert_ushort(value.z).value, convert_ushort(value.w).value);
     }
 
     @GPUIntrinsic(name = "convert_int_sat")
@@ -4304,6 +5614,31 @@ public final class GPU {
         return saturateToSignedInt(value);
     }
 
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(int value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(UByte value) {
+        return Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(UShort value) {
+        return Short.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(UInt value) {
+        return value.value < 0 ? Integer.MAX_VALUE : value.value;
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static int convert_int_sat(ULong value) {
+        return value.value < 0L ? Integer.MAX_VALUE : saturateToSignedInt(value.value);
+    }
+
     @GPUIntrinsic(name = "convert_long_sat")
     public static long convert_long_sat(byte value) {
         return value;
@@ -4332,6 +5667,31 @@ public final class GPU {
     @GPUIntrinsic(name = "convert_long_sat")
     public static long convert_long_sat(int value) {
         return value;
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(long value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(UByte value) {
+        return Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(UShort value) {
+        return Short.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(UInt value) {
+        return Integer.toUnsignedLong(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static long convert_long_sat(ULong value) {
+        return value.value < 0L ? Long.MAX_VALUE : value.value;
     }
 
     @GPUIntrinsic(name = "convert_char_sat")
@@ -4369,6 +5729,56 @@ public final class GPU {
         return saturateToSignedByte(value);
     }
 
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(UByte value) {
+        return saturateToSignedByte(Byte.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(UShort value) {
+        return saturateToSignedByte(Short.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(UInt value) {
+        return saturateToSignedByte(Integer.toUnsignedLong(value.value));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static byte convert_char_sat(ULong value) {
+        return value.value < 0L ? Byte.MAX_VALUE : saturateToSignedByte(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static Byte2 convert_char_sat(Float2 value) {
+        return new Byte2(convert_char_sat(value.x), convert_char_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static Byte3 convert_char_sat(Float3 value) {
+        return new Byte3(convert_char_sat(value.x), convert_char_sat(value.y), convert_char_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static Byte4 convert_char_sat(Float4 value) {
+        return new Byte4(convert_char_sat(value.x), convert_char_sat(value.y), convert_char_sat(value.z), convert_char_sat(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static Byte2 convert_char_sat(Double2 value) {
+        return new Byte2(convert_char_sat(value.x), convert_char_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static Byte3 convert_char_sat(Double3 value) {
+        return new Byte3(convert_char_sat(value.x), convert_char_sat(value.y), convert_char_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_char_sat")
+    public static Byte4 convert_char_sat(Double4 value) {
+        return new Byte4(convert_char_sat(value.x), convert_char_sat(value.y), convert_char_sat(value.z), convert_char_sat(value.w));
+    }
+
     @GPUIntrinsic(code = "convert_uchar_sat({0})")
     public static UByte convert_uchar_sat(byte value) {
         return new UByte(saturateToUnsignedByte((int) value));
@@ -4402,6 +5812,26 @@ public final class GPU {
     @GPUIntrinsic(code = "convert_uchar_sat({0})")
     public static UByte convert_uchar_sat(long value) {
         return new UByte(saturateToUnsignedByte(value));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(UByte value) {
+        return value;
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(UShort value) {
+        return new UByte(saturateToUnsignedByte(Short.toUnsignedInt(value.value)));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(UInt value) {
+        return new UByte(saturateToUnsignedByte(Integer.toUnsignedLong(value.value)));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte convert_uchar_sat(ULong value) {
+        return new UByte(value.value < 0L ? (byte) 0xFF : saturateToUnsignedByte(value.value));
     }
 
     @GPUIntrinsic(name = "convert_short_sat")
@@ -4439,6 +5869,56 @@ public final class GPU {
         return saturateToSignedShort(value);
     }
 
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(UByte value) {
+        return (short) Byte.toUnsignedInt(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(UShort value) {
+        return saturateToSignedShort(Short.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(UInt value) {
+        return saturateToSignedShort(Integer.toUnsignedLong(value.value));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static short convert_short_sat(ULong value) {
+        return value.value < 0L ? Short.MAX_VALUE : saturateToSignedShort(value.value);
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static Short2 convert_short_sat(Float2 value) {
+        return new Short2(convert_short_sat(value.x), convert_short_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static Short3 convert_short_sat(Float3 value) {
+        return new Short3(convert_short_sat(value.x), convert_short_sat(value.y), convert_short_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static Short4 convert_short_sat(Float4 value) {
+        return new Short4(convert_short_sat(value.x), convert_short_sat(value.y), convert_short_sat(value.z), convert_short_sat(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static Short2 convert_short_sat(Double2 value) {
+        return new Short2(convert_short_sat(value.x), convert_short_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static Short3 convert_short_sat(Double3 value) {
+        return new Short3(convert_short_sat(value.x), convert_short_sat(value.y), convert_short_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_short_sat")
+    public static Short4 convert_short_sat(Double4 value) {
+        return new Short4(convert_short_sat(value.x), convert_short_sat(value.y), convert_short_sat(value.z), convert_short_sat(value.w));
+    }
+
     @GPUIntrinsic(code = "convert_ushort_sat({0})")
     public static UShort convert_ushort_sat(byte value) {
         return new UShort(saturateToUnsignedShort((int) value));
@@ -4472,6 +5952,86 @@ public final class GPU {
     @GPUIntrinsic(code = "convert_ushort_sat({0})")
     public static UShort convert_ushort_sat(long value) {
         return new UShort(saturateToUnsignedShort(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(UByte value) {
+        return new UShort((short) Byte.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(UShort value) {
+        return value;
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(UInt value) {
+        return new UShort(saturateToUnsignedShort(Integer.toUnsignedLong(value.value)));
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort convert_ushort_sat(ULong value) {
+        return new UShort(value.value < 0L ? (short) 0xFFFF : saturateToUnsignedShort(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte2 convert_uchar_sat(Float2 value) {
+        return new UByte2(convert_uchar_sat(value.x).value, convert_uchar_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte3 convert_uchar_sat(Float3 value) {
+        return new UByte3(convert_uchar_sat(value.x).value, convert_uchar_sat(value.y).value, convert_uchar_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte4 convert_uchar_sat(Float4 value) {
+        return new UByte4(convert_uchar_sat(value.x).value, convert_uchar_sat(value.y).value, convert_uchar_sat(value.z).value, convert_uchar_sat(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte2 convert_uchar_sat(Double2 value) {
+        return new UByte2(convert_uchar_sat(value.x).value, convert_uchar_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte3 convert_uchar_sat(Double3 value) {
+        return new UByte3(convert_uchar_sat(value.x).value, convert_uchar_sat(value.y).value, convert_uchar_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uchar_sat({0})")
+    public static UByte4 convert_uchar_sat(Double4 value) {
+        return new UByte4(convert_uchar_sat(value.x).value, convert_uchar_sat(value.y).value, convert_uchar_sat(value.z).value, convert_uchar_sat(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort2 convert_ushort_sat(Float2 value) {
+        return new UShort2(convert_ushort_sat(value.x).value, convert_ushort_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort3 convert_ushort_sat(Float3 value) {
+        return new UShort3(convert_ushort_sat(value.x).value, convert_ushort_sat(value.y).value, convert_ushort_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort4 convert_ushort_sat(Float4 value) {
+        return new UShort4(convert_ushort_sat(value.x).value, convert_ushort_sat(value.y).value, convert_ushort_sat(value.z).value, convert_ushort_sat(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort2 convert_ushort_sat(Double2 value) {
+        return new UShort2(convert_ushort_sat(value.x).value, convert_ushort_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort3 convert_ushort_sat(Double3 value) {
+        return new UShort3(convert_ushort_sat(value.x).value, convert_ushort_sat(value.y).value, convert_ushort_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ushort_sat({0})")
+    public static UShort4 convert_ushort_sat(Double4 value) {
+        return new UShort4(convert_ushort_sat(value.x).value, convert_ushort_sat(value.y).value, convert_ushort_sat(value.z).value, convert_ushort_sat(value.w).value);
     }
 
     @GPUIntrinsic(code = "convert_uint_sat({0})")
@@ -4509,6 +6069,26 @@ public final class GPU {
         return new UInt(saturateToUnsignedInt(value));
     }
 
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(UByte value) {
+        return new UInt(Byte.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(UShort value) {
+        return new UInt(Short.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(UInt value) {
+        return value;
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt convert_uint_sat(ULong value) {
+        return new UInt(value.value < 0L ? -1 : (int) value.value);
+    }
+
     @GPUIntrinsic(code = "convert_ulong_sat({0})")
     public static ULong convert_ulong_sat(byte value) {
         return new ULong(saturateToUnsignedLong((int) value));
@@ -4542,6 +6122,146 @@ public final class GPU {
     @GPUIntrinsic(code = "convert_ulong_sat({0})")
     public static ULong convert_ulong_sat(long value) {
         return new ULong(saturateToUnsignedLong(value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(UByte value) {
+        return new ULong(Byte.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(UShort value) {
+        return new ULong(Short.toUnsignedInt(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(UInt value) {
+        return new ULong(Integer.toUnsignedLong(value.value));
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong convert_ulong_sat(ULong value) {
+        return value;
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static Int2 convert_int_sat(Float2 value) {
+        return new Int2(convert_int_sat(value.x), convert_int_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static Int3 convert_int_sat(Float3 value) {
+        return new Int3(convert_int_sat(value.x), convert_int_sat(value.y), convert_int_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static Int4 convert_int_sat(Float4 value) {
+        return new Int4(convert_int_sat(value.x), convert_int_sat(value.y), convert_int_sat(value.z), convert_int_sat(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static Int2 convert_int_sat(Double2 value) {
+        return new Int2(convert_int_sat(value.x), convert_int_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static Int3 convert_int_sat(Double3 value) {
+        return new Int3(convert_int_sat(value.x), convert_int_sat(value.y), convert_int_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_int_sat")
+    public static Int4 convert_int_sat(Double4 value) {
+        return new Int4(convert_int_sat(value.x), convert_int_sat(value.y), convert_int_sat(value.z), convert_int_sat(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static Long2 convert_long_sat(Float2 value) {
+        return new Long2(convert_long_sat(value.x), convert_long_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static Long3 convert_long_sat(Float3 value) {
+        return new Long3(convert_long_sat(value.x), convert_long_sat(value.y), convert_long_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static Long4 convert_long_sat(Float4 value) {
+        return new Long4(convert_long_sat(value.x), convert_long_sat(value.y), convert_long_sat(value.z), convert_long_sat(value.w));
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static Long2 convert_long_sat(Double2 value) {
+        return new Long2(convert_long_sat(value.x), convert_long_sat(value.y));
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static Long3 convert_long_sat(Double3 value) {
+        return new Long3(convert_long_sat(value.x), convert_long_sat(value.y), convert_long_sat(value.z));
+    }
+
+    @GPUIntrinsic(name = "convert_long_sat")
+    public static Long4 convert_long_sat(Double4 value) {
+        return new Long4(convert_long_sat(value.x), convert_long_sat(value.y), convert_long_sat(value.z), convert_long_sat(value.w));
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt2 convert_uint_sat(Float2 value) {
+        return new UInt2(convert_uint_sat(value.x).value, convert_uint_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt3 convert_uint_sat(Float3 value) {
+        return new UInt3(convert_uint_sat(value.x).value, convert_uint_sat(value.y).value, convert_uint_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt4 convert_uint_sat(Float4 value) {
+        return new UInt4(convert_uint_sat(value.x).value, convert_uint_sat(value.y).value, convert_uint_sat(value.z).value, convert_uint_sat(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt2 convert_uint_sat(Double2 value) {
+        return new UInt2(convert_uint_sat(value.x).value, convert_uint_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt3 convert_uint_sat(Double3 value) {
+        return new UInt3(convert_uint_sat(value.x).value, convert_uint_sat(value.y).value, convert_uint_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_uint_sat({0})")
+    public static UInt4 convert_uint_sat(Double4 value) {
+        return new UInt4(convert_uint_sat(value.x).value, convert_uint_sat(value.y).value, convert_uint_sat(value.z).value, convert_uint_sat(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong2 convert_ulong_sat(Float2 value) {
+        return new ULong2(convert_ulong_sat(value.x).value, convert_ulong_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong3 convert_ulong_sat(Float3 value) {
+        return new ULong3(convert_ulong_sat(value.x).value, convert_ulong_sat(value.y).value, convert_ulong_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong4 convert_ulong_sat(Float4 value) {
+        return new ULong4(convert_ulong_sat(value.x).value, convert_ulong_sat(value.y).value, convert_ulong_sat(value.z).value, convert_ulong_sat(value.w).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong2 convert_ulong_sat(Double2 value) {
+        return new ULong2(convert_ulong_sat(value.x).value, convert_ulong_sat(value.y).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong3 convert_ulong_sat(Double3 value) {
+        return new ULong3(convert_ulong_sat(value.x).value, convert_ulong_sat(value.y).value, convert_ulong_sat(value.z).value);
+    }
+
+    @GPUIntrinsic(code = "convert_ulong_sat({0})")
+    public static ULong4 convert_ulong_sat(Double4 value) {
+        return new ULong4(convert_ulong_sat(value.x).value, convert_ulong_sat(value.y).value, convert_ulong_sat(value.z).value, convert_ulong_sat(value.w).value);
     }
 
     @GPUIntrinsic(code = "((uint) ({0}))")

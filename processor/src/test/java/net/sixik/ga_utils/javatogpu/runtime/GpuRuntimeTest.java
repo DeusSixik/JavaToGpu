@@ -11,6 +11,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class GpuRuntimeTest {
 
     @Test
+    void invokeWithExecutionConfigPassesConfigIntoKernelInvocation() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel(__global int* output) { output[0] = 1; }",
+                java.util.List.of()
+        );
+        java.util.concurrent.atomic.AtomicReference<GpuKernelInvocation> capturedInvocation = new java.util.concurrent.atomic.AtomicReference<>();
+        GpuRuntimeBackend previousBackend = GpuRuntime.backend();
+        GpuRuntime.setBackend(capturedInvocation::set);
+
+        try {
+            GpuRuntime.invoke(GpuExecutionConfig.oneDimensional(11L), descriptor, new Object[0]);
+            GpuKernelInvocation invocation = capturedInvocation.get();
+            assertEquals(11L, invocation.globalWorkSize());
+            assertEquals(11L, invocation.executionConfig().globalWorkSize());
+        } finally {
+            GpuRuntime.setBackend(previousBackend);
+        }
+    }
+
+    @Test
+    void executionConfigRejectsNonPositiveGlobalWorkSize() {
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> GpuExecutionConfig.oneDimensional(0L)
+        );
+
+        assertEquals("globalWorkSize must be positive: 0", exception.getMessage());
+    }
+
+    @Test
     void defaultBackendThrowsHelpfulError() {
         GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
                 "kernel",

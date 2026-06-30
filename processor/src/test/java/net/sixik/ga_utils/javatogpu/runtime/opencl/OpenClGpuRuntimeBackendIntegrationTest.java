@@ -21,6 +21,8 @@ import net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct;
 import net.sixik.ga_utils.javatogpu.api.annotations.OpenCLAttributes;
 import net.sixik.ga_utils.javatogpu.processors.GpuCompilerProcessor;
 import net.sixik.ga_utils.javatogpu.runtime.GpuGeneratedLauncherInvoker;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeBackendReport;
+import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeFeature;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntime;
 import net.sixik.ga_utils.javatogpu.runtime.GpuRuntimeScope;
 import net.sixik.ga_utils.javatogpu.runtime.GpuKernelDescriptor;
@@ -41,6 +43,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Random;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -178,6 +181,568 @@ class OpenClGpuRuntimeBackendIntegrationTest {
             GpuGeneratedLauncherInvoker.invoke(ownerClass, "kernel", new Float2(1.5f, 2.0f), output);
 
             assertArrayEquals(new float[]{3.5f, 4.5f, 5.5f, 6.5f}, output);
+        }
+    }
+
+    @Test
+    void comparesGeneratedLauncherPerlinWorkloadAgainstCpuReferenceOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+        assumeOpenClFp64Available("Skipping Perlin workload integration test: no fp64 support");
+
+        CompiledGpuSource compiled = compileGpuSource(
+                "sample.PerlinWorkload",
+                """
+                        package sample;
+
+                        import net.sixik.ga_utils.javatogpu.api.Double3;
+                        import net.sixik.ga_utils.javatogpu.api.GPU;
+                        import net.sixik.ga_utils.javatogpu.api.Int3;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.CCode;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUGlobal;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct;
+
+                        import java.util.Random;
+
+                        public class PerlinWorkload {
+                            private static final int IMPROVED_NOISE_PERMUTATION_SIZE = 256;
+
+                            @net.sixik.ga_utils.javatogpu.api.annotations.GPU
+                            public static void kernel(PerlinNoiseInfo noise,
+                                                      @GPUGlobal byte[] permutation0,
+                                                      @GPUGlobal byte[] permutation1,
+                                                      @GPUGlobal byte[] permutation2,
+                                                      @GPUGlobal double[] outValues) {
+                                int id = GPU.get_global_id(0);
+                                double x = (id & 15) * 0.125;
+                                double z = (id >> 4) * 0.125;
+                                outValues[id] = NoiseMath.perlinValue(noise, permutation0, permutation1, permutation2, x, 0.0, z);
+                            }
+
+                            public static void cpuKernel(PerlinNoiseInfo noise,
+                                                         byte[] permutation0,
+                                                         byte[] permutation1,
+                                                         byte[] permutation2,
+                                                         double[] outValues) {
+                                for (int id = 0; id < outValues.length; id++) {
+                                    double x = (id & 15) * 0.125;
+                                    double z = (id >> 4) * 0.125;
+                                    outValues[id] = NoiseMath.perlinValue(noise, permutation0, permutation1, permutation2, x, 0.0, z);
+                                }
+                            }
+
+                            @GPUStruct
+                            public static class PerlinNoiseInfo {
+                                public int firstOctave;
+                                public int noiseLevelCount;
+                                public double lowestFreqValueFactor;
+                                public double lowestFreqInputFactor;
+                                public double maxValue;
+                                public Int3 levelActive;
+                                public Double3 levelXo;
+                                public Double3 levelYo;
+                                public Double3 levelZo;
+                                public Double3 amplitudes;
+
+                                public PerlinNoiseInfo() {
+                                }
+                            }
+
+                            public static final class NoiseMath {
+                                private NoiseMath() {
+                                }
+
+                                @CCode
+                                public static double perlinValue(
+                                        PerlinNoiseInfo noise,
+                                        @GPUGlobal byte[] permutation0,
+                                        @GPUGlobal byte[] permutation1,
+                                        @GPUGlobal byte[] permutation2,
+                                        double x,
+                                        double y,
+                                        double z
+                                ) {
+                                    double value = 0.0;
+                                    double inputFactor0 = noise.lowestFreqInputFactor;
+                                    double valueFactor0 = noise.lowestFreqValueFactor;
+                                    double inputFactor1 = inputFactor0 * 2.0;
+                                    double valueFactor1 = valueFactor0 * 0.5;
+                                    double inputFactor2 = inputFactor1 * 2.0;
+                                    double valueFactor2 = valueFactor1 * 0.5;
+
+                                    if (noise.levelActive.x != 0) {
+                                        value += noise.amplitudes.x * improvedNoise(
+                                                permutation0,
+                                                noise.levelXo.x,
+                                                noise.levelYo.x,
+                                                noise.levelZo.x,
+                                                wrap(x * inputFactor0),
+                                                wrap(y * inputFactor0),
+                                                wrap(z * inputFactor0),
+                                                0.0,
+                                                0.0
+                                        ) * valueFactor0;
+                                    }
+
+                                    if (noise.levelActive.y != 0) {
+                                        value += noise.amplitudes.y * improvedNoise(
+                                                permutation1,
+                                                noise.levelXo.y,
+                                                noise.levelYo.y,
+                                                noise.levelZo.y,
+                                                wrap(x * inputFactor1),
+                                                wrap(y * inputFactor1),
+                                                wrap(z * inputFactor1),
+                                                0.0,
+                                                0.0
+                                        ) * valueFactor1;
+                                    }
+
+                                    if (noise.levelActive.z != 0) {
+                                        value += noise.amplitudes.z * improvedNoise(
+                                                permutation2,
+                                                noise.levelXo.z,
+                                                noise.levelYo.z,
+                                                noise.levelZo.z,
+                                                wrap(x * inputFactor2),
+                                                wrap(y * inputFactor2),
+                                                wrap(z * inputFactor2),
+                                                0.0,
+                                                0.0
+                                        ) * valueFactor2;
+                                    }
+
+                                    return value;
+                                }
+
+                                @CCode(inline = true)
+                                public static double improvedNoise(
+                                        @GPUGlobal byte[] permutations,
+                                        double xo,
+                                        double yo,
+                                        double zo,
+                                        double x,
+                                        double y,
+                                        double z,
+                                        double step,
+                                        double limit
+                                ) {
+                                    double shiftedX = x + xo;
+                                    double shiftedY = y + yo;
+                                    double shiftedZ = z + zo;
+                                    int floorX = floorToInt(shiftedX);
+                                    int floorY = floorToInt(shiftedY);
+                                    int floorZ = floorToInt(shiftedZ);
+                                    double localX = shiftedX - floorX;
+                                    double localY = shiftedY - floorY;
+                                    double localZ = shiftedZ - floorZ;
+                                    double snappedY = 0.0;
+
+                                    if (step != 0.0) {
+                                        double clampedY = limit >= 0.0 && limit < localY ? limit : localY;
+                                        snappedY = floorToLong(clampedY / step + 1.0E-7) * step;
+                                    }
+
+                                    return sampleAndLerp(permutations, floorX, floorY, floorZ, localX, localY - snappedY, localZ, localY);
+                                }
+
+                                @CCode(inline = true)
+                                public static double sampleAndLerp(
+                                        @GPUGlobal byte[] permutations,
+                                        int x,
+                                        int y,
+                                        int z,
+                                        double localX,
+                                        double localY,
+                                        double localZ,
+                                        double smoothYInput
+                                ) {
+                                    int px0 = permutation(permutations, x);
+                                    int px1 = permutation(permutations, x + 1);
+                                    int py00 = permutation(permutations, px0 + y);
+                                    int py01 = permutation(permutations, px0 + y + 1);
+                                    int py10 = permutation(permutations, px1 + y);
+                                    int py11 = permutation(permutations, px1 + y + 1);
+
+                                    double g000 = gradDot(permutation(permutations, py00 + z), localX, localY, localZ);
+                                    double g100 = gradDot(permutation(permutations, py10 + z), localX - 1.0, localY, localZ);
+                                    double g010 = gradDot(permutation(permutations, py01 + z), localX, localY - 1.0, localZ);
+                                    double g110 = gradDot(permutation(permutations, py11 + z), localX - 1.0, localY - 1.0, localZ);
+                                    double g001 = gradDot(permutation(permutations, py00 + z + 1), localX, localY, localZ - 1.0);
+                                    double g101 = gradDot(permutation(permutations, py10 + z + 1), localX - 1.0, localY, localZ - 1.0);
+                                    double g011 = gradDot(permutation(permutations, py01 + z + 1), localX, localY - 1.0, localZ - 1.0);
+                                    double g111 = gradDot(permutation(permutations, py11 + z + 1), localX - 1.0, localY - 1.0, localZ - 1.0);
+
+                                    double smoothX = smoothstep(localX);
+                                    double smoothY = smoothstep(smoothYInput);
+                                    double smoothZ = smoothstep(localZ);
+
+                                    return lerp3(smoothX, smoothY, smoothZ, g000, g100, g010, g110, g001, g101, g011, g111);
+                                }
+
+                                @CCode(inline = true)
+                                public static int permutation(@GPUGlobal byte[] permutations, int index) {
+                                    byte value = permutations[index & 255];
+                                    return value < 0 ? value + 256 : value;
+                                }
+
+                                @CCode(inline = true)
+                                public static double gradDot(int gradient, double x, double y, double z) {
+                                    switch (gradient & 15) {
+                                        case 0:
+                                            return x + y;
+                                        case 1:
+                                            return -x + y;
+                                        case 2:
+                                            return x - y;
+                                        case 3:
+                                            return -x - y;
+                                        case 4:
+                                            return x + z;
+                                        case 5:
+                                            return -x + z;
+                                        case 6:
+                                            return x - z;
+                                        case 7:
+                                            return -x - z;
+                                        case 8:
+                                            return y + z;
+                                        case 9:
+                                            return -y + z;
+                                        case 10:
+                                            return y - z;
+                                        case 11:
+                                            return -y - z;
+                                        case 12:
+                                            return x + y;
+                                        case 13:
+                                            return -y + z;
+                                        case 14:
+                                            return -x + y;
+                                        default:
+                                            return -y - z;
+                                    }
+                                }
+
+                                @CCode(inline = true)
+                                public static double smoothstep(double value) {
+                                    return value * value * value * (value * (value * 6.0 - 15.0) + 10.0);
+                                }
+
+                                @CCode(inline = true)
+                                public static double lerp(double delta, double start, double end) {
+                                    return start + delta * (end - start);
+                                }
+
+                                @CCode(inline = true)
+                                public static double lerp2(double dx, double dy, double x0y0, double x1y0, double x0y1, double x1y1) {
+                                    return lerp(dy, lerp(dx, x0y0, x1y0), lerp(dx, x0y1, x1y1));
+                                }
+
+                                @CCode(inline = true)
+                                public static double lerp3(
+                                        double dx,
+                                        double dy,
+                                        double dz,
+                                        double x0y0z0,
+                                        double x1y0z0,
+                                        double x0y1z0,
+                                        double x1y1z0,
+                                        double x0y0z1,
+                                        double x1y0z1,
+                                        double x0y1z1,
+                                        double x1y1z1
+                                ) {
+                                    return lerp(
+                                            dz,
+                                            lerp2(dx, dy, x0y0z0, x1y0z0, x0y1z0, x1y1z0),
+                                            lerp2(dx, dy, x0y0z1, x1y0z1, x0y1z1, x1y1z1)
+                                    );
+                                }
+
+                                @CCode(inline = true)
+                                public static double wrap(double value) {
+                                    return value - (double) floorToLong(value / 3.3554432E7 + 0.5) * 3.3554432E7;
+                                }
+
+                                @CCode(inline = true)
+                                public static long floorToLong(double value) {
+                                    long whole = (long) value;
+                                    return value < whole ? whole - 1L : whole;
+                                }
+
+                                @CCode(inline = true)
+                                public static int floorToInt(double value) {
+                                    return (int) floorToLong(value);
+                                }
+                            }
+
+                            public static final class Fixture {
+                                public final PerlinNoiseInfo info;
+                                public final byte[] permutation0;
+                                public final byte[] permutation1;
+                                public final byte[] permutation2;
+
+                                public Fixture(PerlinNoiseInfo info, byte[] permutation0, byte[] permutation1, byte[] permutation2) {
+                                    this.info = info;
+                                    this.permutation0 = permutation0;
+                                    this.permutation1 = permutation1;
+                                    this.permutation2 = permutation2;
+                                }
+                            }
+
+                            public static Fixture createDefaultFixture(long seed) {
+                                Random random = new Random(seed);
+                                PerlinNoiseInfo noise = new PerlinNoiseInfo();
+
+                                noise.firstOctave = -3;
+                                double[] amplitudes = new double[]{1.0, 1.0, 0.0};
+                                noise.levelActive = new Int3(0, 0, 0);
+                                noise.levelXo = new Double3(0.0, 0.0, 0.0);
+                                noise.levelYo = new Double3(0.0, 0.0, 0.0);
+                                noise.levelZo = new Double3(0.0, 0.0, 0.0);
+                                noise.amplitudes = new Double3(amplitudes[0], amplitudes[1], amplitudes[2]);
+
+                                byte[] permutation0 = new byte[IMPROVED_NOISE_PERMUTATION_SIZE];
+                                byte[] permutation1 = new byte[IMPROVED_NOISE_PERMUTATION_SIZE];
+                                byte[] permutation2 = new byte[IMPROVED_NOISE_PERMUTATION_SIZE];
+                                int zeroOctaveIndex = -noise.firstOctave;
+
+                                createDiscardedImprovedNoise(random);
+                                if (zeroOctaveIndex >= 0 && zeroOctaveIndex < amplitudes.length && amplitudes[zeroOctaveIndex] != 0.0) {
+                                    storeImprovedNoise(random, zeroOctaveIndex, noise, permutation0, permutation1, permutation2);
+                                }
+
+                                for (int k = zeroOctaveIndex - 1; k >= 0; k--) {
+                                    if (k < amplitudes.length) {
+                                        double amplitude = amplitudes[k];
+                                        if (amplitude != 0.0) {
+                                            storeImprovedNoise(random, k, noise, permutation0, permutation1, permutation2);
+                                        } else {
+                                            skipOctave(random, 262);
+                                        }
+                                    } else {
+                                        skipOctave(random, 262);
+                                    }
+                                }
+
+                                noise.noiseLevelCount = amplitudes.length;
+                                noise.lowestFreqInputFactor = Math.pow(2.0, -zeroOctaveIndex);
+                                noise.lowestFreqValueFactor = Math.pow(2.0, amplitudes.length - 1) / (Math.pow(2.0, amplitudes.length) - 1.0);
+                                noise.maxValue = edgeValue(noise.levelActive, noise.amplitudes, noise.lowestFreqValueFactor, 2.0);
+
+                                return new Fixture(noise, permutation0, permutation1, permutation2);
+                            }
+
+                            private static double edgeValue(Int3 noiseLevelActive, Double3 amplitudes, double lowestFreqValueFactor, double d) {
+                                double e = 0.0;
+                                double f = lowestFreqValueFactor;
+                                if (noiseLevelActive.x != 0) {
+                                    e += amplitudes.x * d * f;
+                                }
+                                f *= 0.5;
+                                if (noiseLevelActive.y != 0) {
+                                    e += amplitudes.y * d * f;
+                                }
+                                f *= 0.5;
+                                if (noiseLevelActive.z != 0) {
+                                    e += amplitudes.z * d * f;
+                                }
+                                return e;
+                            }
+
+                            private static void skipOctave(Random random, int value) {
+                                for (int i = 0; i < value; i++) {
+                                    random.nextInt();
+                                }
+                            }
+
+                            private static void createDiscardedImprovedNoise(Random random) {
+                                createImprovedNoise(random, null, null, null, null, -1);
+                            }
+
+                            private static void storeImprovedNoise(Random random,
+                                                                   int levelIndex,
+                                                                   PerlinNoiseInfo noise,
+                                                                   byte[] permutation0,
+                                                                   byte[] permutation1,
+                                                                   byte[] permutation2) {
+                                createImprovedNoise(random, noise, permutation0, permutation1, permutation2, levelIndex);
+                            }
+
+                            private static void createImprovedNoise(Random random,
+                                                                    PerlinNoiseInfo noise,
+                                                                    byte[] permutation0,
+                                                                    byte[] permutation1,
+                                                                    byte[] permutation2,
+                                                                    int levelIndex) {
+                                double xo = random.nextDouble() * 256.0;
+                                double yo = random.nextDouble() * 256.0;
+                                double zo = random.nextDouble() * 256.0;
+
+                                byte[] p = new byte[256];
+                                for (int i = 0; i < p.length; i++) {
+                                    p[i] = (byte) i;
+                                }
+
+                                for (int i = 0; i < 256; ++i) {
+                                    int j = random.nextInt(256 - i);
+                                    byte b = p[i];
+                                    p[i] = p[i + j];
+                                    p[i + j] = b;
+                                }
+
+                                if (levelIndex >= 0) {
+                                    switch (levelIndex) {
+                                        case 0 -> {
+                                            noise.levelActive.x = 1;
+                                            noise.levelXo.x = xo;
+                                            noise.levelYo.x = yo;
+                                            noise.levelZo.x = zo;
+                                            System.arraycopy(p, 0, permutation0, 0, p.length);
+                                        }
+                                        case 1 -> {
+                                            noise.levelActive.y = 1;
+                                            noise.levelXo.y = xo;
+                                            noise.levelYo.y = yo;
+                                            noise.levelZo.y = zo;
+                                            System.arraycopy(p, 0, permutation1, 0, p.length);
+                                        }
+                                        case 2 -> {
+                                            noise.levelActive.z = 1;
+                                            noise.levelXo.z = xo;
+                                            noise.levelYo.z = yo;
+                                            noise.levelZo.z = zo;
+                                            System.arraycopy(p, 0, permutation2, 0, p.length);
+                                        }
+                                        default -> {
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        """
+        );
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{compiled.classOutputDir().toUri().toURL()}, getClass().getClassLoader());
+             GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+            Class<?> ownerClass = Class.forName("sample.PerlinWorkload", true, classLoader);
+            Class<?> fixtureClass = Class.forName("sample.PerlinWorkload$Fixture", true, classLoader);
+
+            Object fixture = ownerClass.getMethod("createDefaultFixture", long.class).invoke(null, 255L);
+            Object noise = fixtureClass.getField("info").get(fixture);
+            byte[] permutation0 = (byte[]) fixtureClass.getField("permutation0").get(fixture);
+            byte[] permutation1 = (byte[]) fixtureClass.getField("permutation1").get(fixture);
+            byte[] permutation2 = (byte[]) fixtureClass.getField("permutation2").get(fixture);
+
+            double[] cpuOutput = new double[256];
+            double[] gpuOutput = new double[256];
+
+            ownerClass.getMethod("cpuKernel", noise.getClass(), byte[].class, byte[].class, byte[].class, double[].class)
+                    .invoke(null, noise, permutation0, permutation1, permutation2, cpuOutput);
+
+            GpuGeneratedLauncherInvoker.invoke(ownerClass, "kernel", noise, permutation0, permutation1, permutation2, gpuOutput);
+
+            for (int i = 0; i < cpuOutput.length; i++) {
+                org.junit.jupiter.api.Assertions.assertEquals(cpuOutput[i], gpuOutput[i], 1.0e-9, "Mismatch at index " + i);
+            }
+        }
+    }
+
+    @Test
+    void comparesGeneratedLauncherPackedBlobWorkloadAgainstCpuReferenceOnAvailableOpenClDevice() throws Exception {
+        assumeOpenClAvailable();
+
+        CompiledGpuSource compiled = compileGpuSource(
+                "sample.PackedBlobWorkload",
+                """
+                        package sample;
+
+                        import net.sixik.ga_utils.javatogpu.api.GPU;
+                        import net.sixik.ga_utils.javatogpu.api.GlobalBytePtr;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUGlobal;
+                        import net.sixik.ga_utils.javatogpu.api.annotations.GPUStruct;
+
+                        import java.nio.ByteBuffer;
+                        import java.nio.ByteOrder;
+
+                        public class PackedBlobWorkload {
+                            @net.sixik.ga_utils.javatogpu.api.annotations.GPU
+                            public static void kernel(@GPUGlobal byte[] blob, PackedNoiseView view, @GPUGlobal int[] output) {
+                                int id = GPU.get_global_id(0);
+                                GlobalBytePtr root = GPU.global(blob);
+                                int sampler = root.add(view.samplerOffset + id * 4).asIntPtr().value;
+                                int density = root.add(view.densityOffset + id * 4).asIntPtr().value;
+                                output[id] = sampler + density;
+                            }
+
+                            public static void cpuKernel(byte[] blob, PackedNoiseView view, int[] output) {
+                                ByteBuffer buffer = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
+                                for (int id = 0; id < output.length; id++) {
+                                    int sampler = buffer.getInt(view.samplerOffset + id * 4);
+                                    int density = buffer.getInt(view.densityOffset + id * 4);
+                                    output[id] = sampler + density;
+                                }
+                            }
+
+                            @GPUStruct
+                            public static class PackedNoiseView {
+                                public int samplerOffset;
+                                public int densityOffset;
+
+                                public PackedNoiseView() {
+                                }
+
+                                public PackedNoiseView(int samplerOffset, int densityOffset) {
+                                    this.samplerOffset = samplerOffset;
+                                    this.densityOffset = densityOffset;
+                                }
+                            }
+
+                            public static final class Fixture {
+                                public final byte[] blob;
+                                public final PackedNoiseView view;
+
+                                public Fixture(byte[] blob, PackedNoiseView view) {
+                                    this.blob = blob;
+                                    this.view = view;
+                                }
+                            }
+
+                            public static Fixture createFixture() {
+                                int[] samplerValues = new int[]{7, 14, 21, 28, 35, 42, 49, 56};
+                                int[] densityValues = new int[]{3, 6, 9, 12, 15, 18, 21, 24};
+                                int samplerOffset = 0;
+                                int densityOffset = samplerValues.length * 4;
+                                byte[] blob = new byte[(samplerValues.length + densityValues.length) * 4];
+                                ByteBuffer buffer = ByteBuffer.wrap(blob).order(ByteOrder.LITTLE_ENDIAN);
+                                for (int i = 0; i < samplerValues.length; i++) {
+                                    buffer.putInt(samplerOffset + i * 4, samplerValues[i]);
+                                    buffer.putInt(densityOffset + i * 4, densityValues[i]);
+                                }
+                                return new Fixture(blob, new PackedNoiseView(samplerOffset, densityOffset));
+                            }
+                        }
+                        """
+        );
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{compiled.classOutputDir().toUri().toURL()}, getClass().getClassLoader());
+             GpuRuntimeScope ignored = GpuRuntime.useOpenCl()) {
+            Class<?> ownerClass = Class.forName("sample.PackedBlobWorkload", true, classLoader);
+            Class<?> fixtureClass = Class.forName("sample.PackedBlobWorkload$Fixture", true, classLoader);
+
+            Object fixture = ownerClass.getMethod("createFixture").invoke(null);
+            byte[] blob = (byte[]) fixtureClass.getField("blob").get(fixture);
+            Object view = fixtureClass.getField("view").get(fixture);
+
+            int[] cpuOutput = new int[8];
+            int[] gpuOutput = new int[8];
+
+            ownerClass.getMethod("cpuKernel", byte[].class, view.getClass(), int[].class)
+                    .invoke(null, blob, view, cpuOutput);
+
+            GpuGeneratedLauncherInvoker.invokeWithGlobalWorkSize(ownerClass, "kernel", 8L, blob, view, gpuOutput);
+
+            assertArrayEquals(cpuOutput, gpuOutput);
         }
     }
 
@@ -491,6 +1056,120 @@ class OpenClGpuRuntimeBackendIntegrationTest {
     }
 
     @Test
+    void repeatedVectorArrayInvocationsRemainStableOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "gpu_vector_array_repeat_entry",
+                "inline://integration/vector-array-repeat-kernel.cl",
+                """
+                        __kernel void gpu_vector_array_repeat_entry(__global float2* input, __global float2* output) {
+                            int id = get_global_id(0);
+                            output[id].x = input[id].x + 1.0f;
+                            output[id].y = input[id].y + 2.0f;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "net.sixik.ga_utils.javatogpu.api.Float2[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "net.sixik.ga_utils.javatogpu.api.Float2[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(descriptor, "Skipping repeated vector array integration stability test");
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+            for (int iteration = 0; iteration < 40; iteration++) {
+                Float2[] input = new Float2[]{
+                        new Float2(1.0f + iteration, 2.0f + iteration),
+                        new Float2(3.0f + iteration, 4.0f + iteration)
+                };
+                Float2[] output = new Float2[]{new Float2(), new Float2()};
+
+                backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{input, output}));
+
+                assertArrayEquals(
+                        new float[]{2.0f + iteration, 4.0f + iteration},
+                        new float[]{output[0].x, output[1].x}
+                );
+                assertArrayEquals(
+                        new float[]{4.0f + iteration, 6.0f + iteration},
+                        new float[]{output[0].y, output[1].y}
+                );
+            }
+        }
+    }
+
+    @Test
+    void repeatedMixedScalarAndStructArrayInvocationsRemainStableOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor scalarDescriptor = new GpuKernelDescriptor(
+                "gpu_scalar_repeat_entry",
+                "inline://integration/scalar-repeat-kernel.cl",
+                """
+                        __kernel void gpu_scalar_repeat_entry(__global const float* input, float scale, __global float* output) {
+                            int id = get_global_id(0);
+                            output[id] = input[id] + scale;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "float[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("scale", "float", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "float[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        GpuKernelDescriptor structDescriptor = new GpuKernelDescriptor(
+                "gpu_struct_repeat_entry",
+                "inline://integration/struct-repeat-kernel.cl",
+                """
+                        typedef struct{
+                            float x;
+                            float y;
+                        } StructArraySample;
+
+                        __kernel void gpu_struct_repeat_entry(__global StructArraySample* input, __global StructArraySample* output) {
+                            int id = get_global_id(0);
+                            output[id].x = input[id].x + 1.0f;
+                            output[id].y = input[id].y + 2.0f;
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "sample.StructArraySample[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "sample.StructArraySample[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(scalarDescriptor, "Skipping repeated mixed scalar/struct integration stability test");
+        assumeKernelCompiles(structDescriptor, "Skipping repeated mixed scalar/struct integration stability test");
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+            for (int iteration = 0; iteration < 40; iteration++) {
+                float[] input = new float[]{1.0f + iteration, 2.0f + iteration, 3.0f + iteration, 4.0f + iteration};
+                float[] output = new float[]{0.0f, 0.0f, 0.0f, 0.0f};
+
+                backend.invoke(new GpuKernelInvocation(scalarDescriptor, new Object[]{input, 2.5f, output}));
+
+                assertArrayEquals(
+                        new float[]{3.5f + iteration, 4.5f + iteration, 5.5f + iteration, 6.5f + iteration},
+                        output
+                );
+
+                StructArraySample[] structInput = new StructArraySample[]{
+                        new StructArraySample(1.0f + iteration, 2.0f + iteration),
+                        new StructArraySample(3.0f + iteration, 4.0f + iteration)
+                };
+                StructArraySample[] structOutput = new StructArraySample[]{new StructArraySample(), new StructArraySample()};
+
+                backend.invoke(new GpuKernelInvocation(structDescriptor, new Object[]{structInput, structOutput}));
+
+                assertArrayEquals(
+                        new float[]{2.0f + iteration, 4.0f + iteration},
+                        new float[]{structOutput[0].x, structOutput[1].x}
+                );
+                assertArrayEquals(
+                        new float[]{4.0f + iteration, 6.0f + iteration},
+                        new float[]{structOutput[0].y, structOutput[1].y}
+                );
+            }
+        }
+    }
+
+    @Test
     void runsImageAndSamplerKernelOnAvailableOpenClDevice() {
         assumeOpenClAvailable();
 
@@ -533,6 +1212,53 @@ class OpenClGpuRuntimeBackendIntegrationTest {
             assertArrayEquals(new int[]{10, 26}, output);
             assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[0], written[1], written[2], written[3]});
             assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[4], written[5], written[6], written[7]});
+        }
+    }
+
+    @Test
+    void repeatedImageKernelInvocationsRemainStableOnAvailableOpenClDevice() {
+        assumeOpenClAvailable();
+
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "gpu_image_repeat_entry",
+                "inline://integration/image-repeat-kernel.cl",
+                """
+                        __kernel void gpu_image_repeat_entry(read_only image2d_t inputImage, write_only image2d_t outputImage, sampler_t sampler, __global int* output) {
+                            int id = get_global_id(0);
+                            int2 coords = (int2)(id, 0);
+                            int4 pixel = read_imagei(inputImage, sampler, coords);
+                            output[id] = pixel.x + pixel.y + pixel.z + pixel.w;
+                            write_imagef(outputImage, coords, (float4)(1.0f, 0.5f, 0.25f, 1.0f));
+                        }""",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("inputImage", "Image2DReadOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("outputImage", "Image2DWriteOnly", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("sampler", "Sampler", GpuKernelParameterAccess.VALUE),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+        assumeKernelCompiles(descriptor, "Skipping repeated image integration stability test");
+
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend();
+             Sampler sampler = backend.createNearestClampToEdgeSampler()) {
+            for (int iteration = 0; iteration < 30; iteration++) {
+                int[] output = new int[]{0, 0};
+
+                try (Image2DReadOnly inputImage = backend.createReadOnlyRgbaIntImage(
+                        2,
+                        1,
+                        new int[]{1 + iteration, 2, 3, 4, 5 + iteration, 6, 7, 8}
+                );
+                     Image2DWriteOnly outputImage = backend.createWriteOnlyRgbaFloatImage(2, 1)) {
+                    backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{inputImage, outputImage, sampler, output}));
+
+                    assertArrayEquals(new int[]{10 + iteration, 26 + iteration}, output);
+
+                    float[] written = backend.readRgbaFloatImage(outputImage);
+                    assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[0], written[1], written[2], written[3]});
+                    assertArrayEquals(new float[]{1.0f, 0.5f, 0.25f, 1.0f}, new float[]{written[4], written[5], written[6], written[7]});
+                }
+            }
         }
     }
 
@@ -1568,6 +2294,19 @@ class OpenClGpuRuntimeBackendIntegrationTest {
         } catch (UnsatisfiedLinkError | IllegalStateException exception) {
             Assumptions.assumeTrue(false, "Skipping OpenCL integration smoke test: " + exception.getMessage());
         }
+    }
+
+    private static void assumeOpenClFp64Available(String messagePrefix) {
+        GpuRuntimeBackendReport report;
+        try (OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend()) {
+            report = backend.describeCapabilities();
+        } catch (RuntimeException exception) {
+            Assumptions.assumeTrue(false, messagePrefix + ": " + exception.getMessage());
+            return;
+        }
+
+        Assumptions.assumeTrue(report.available(), messagePrefix + ": " + report.detail());
+        Assumptions.assumeTrue(report.supports(GpuRuntimeFeature.DOUBLE_PRECISION), messagePrefix + ": no fp64 support");
     }
 
     private static void assumeKernelCompiles(GpuKernelDescriptor descriptor, String messagePrefix) {

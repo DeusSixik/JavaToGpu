@@ -105,6 +105,104 @@ class OpenClGpuRuntimeBackendTest {
     }
 
     @Test
+    void explicitGlobalWorkSizeAllowsBufferlessKernelLaunch() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of()
+        );
+
+        AtomicReference<Long> executedGlobalSize = new AtomicReference<>();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+
+            @Override
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+                executedGlobalSize.set(globalWorkSize);
+            }
+        };
+
+        backend.invoke(new GpuKernelInvocation(descriptor, new Object[0], 8L));
+
+        assertEquals(8L, executedGlobalSize.get());
+    }
+
+    @Test
+    void explicitGlobalWorkSizeBypassesMismatchedBufferLengthRestriction() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("blob", "byte[]", GpuKernelParameterAccess.READ_ONLY),
+                        new GpuKernelParameterDescriptor("output", "int[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        AtomicReference<Long> executedGlobalSize = new AtomicReference<>();
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+
+            @Override
+            protected Object createDeviceBuffer(OpenClBufferBinding binding) {
+                return new Object();
+            }
+
+            @Override
+            protected void uploadToDeviceBuffer(Object nativeBuffer, OpenClBufferBinding binding) {
+            }
+
+            @Override
+            protected void bindBufferArgument(OpenClCompiledKernel compiledKernel, int parameterIndex, Object nativeBuffer) {
+            }
+
+            @Override
+            protected void readBackFromDeviceBuffer(Object nativeBuffer, OpenClBufferBinding binding) {
+            }
+
+            @Override
+            protected void enqueueKernel(OpenClCompiledKernel compiledKernel, long globalWorkSize) {
+                executedGlobalSize.set(globalWorkSize);
+            }
+        };
+
+        backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new byte[64], new int[8]}, 8L));
+
+        assertEquals(8L, executedGlobalSize.get());
+    }
+
+    @Test
+    void rejectsNonPositiveExplicitGlobalWorkSize() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of()
+        );
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+        };
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[0], 0L))
+        );
+
+        assertTrue(exception.getMessage().contains("Explicit global work size must be positive for kernel kernel: 0"));
+    }
+
+    @Test
     void executesPreparedArgumentsInKernelOrderAndReadsBackOutputs() {
         GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
                 "kernel",
@@ -259,6 +357,39 @@ class OpenClGpuRuntimeBackendTest {
         assertTrue(exception.getMessage().contains("must share the same logical length"));
         assertEquals(0, executeCalls.get());
         assertEquals(0, backend.cacheSize());
+    }
+
+    @Test
+    void unsupportedUploadTypesIncludeQuickFixHints() {
+        GpuKernelDescriptor descriptor = new GpuKernelDescriptor(
+                "kernel",
+                "javatogpu/sample/Demo/kernel.cl",
+                "__kernel void kernel() {}",
+                java.util.List.of(
+                        new GpuKernelParameterDescriptor("input", "java.lang.Object[]", GpuKernelParameterAccess.READ_WRITE)
+                )
+        );
+
+        OpenClGpuRuntimeBackend backend = new OpenClGpuRuntimeBackend() {
+            @Override
+            protected OpenClCompiledKernel compileKernel(GpuKernelDescriptor kernelDescriptor) {
+                return new OpenClCompiledKernel(kernelDescriptor, "compiled:test");
+            }
+
+            @Override
+            protected Object createDeviceBuffer(OpenClBufferBinding binding) {
+                return new Object();
+            }
+        };
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> backend.invoke(new GpuKernelInvocation(descriptor, new Object[]{new Object[]{new Object()}}))
+        );
+
+        assertTrue(exception.getMessage().contains("Failed to marshall parameter 'input':"));
+        assertTrue(exception.getMessage().contains("Unsupported OpenCL argument type:"));
+        assertTrue(exception.getMessage().contains("java.lang.Object"));
     }
 
     @Test

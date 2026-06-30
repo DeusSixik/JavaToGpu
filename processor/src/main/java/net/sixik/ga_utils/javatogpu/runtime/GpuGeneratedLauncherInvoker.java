@@ -11,15 +11,30 @@ public final class GpuGeneratedLauncherInvoker {
     }
 
     public static Object invoke(Class<?> ownerClass, String methodName, Object... arguments) {
+        return invokeLauncherMethod(ownerClass, methodName, "invoke", arguments);
+    }
+
+    public static Object invokeWithGlobalWorkSize(Class<?> ownerClass, String methodName, long globalWorkSize, Object... arguments) {
+        Object[] fullArguments = new Object[arguments.length + 1];
+        fullArguments[0] = globalWorkSize;
+        System.arraycopy(arguments, 0, fullArguments, 1, arguments.length);
+        return invokeLauncherMethod(ownerClass, methodName, "invokeWithGlobalWorkSize", fullArguments);
+    }
+
+    public static Object invokeWithConfig(Class<?> ownerClass, String methodName, GpuExecutionConfig executionConfig, Object... arguments) {
+        return invokeWithGlobalWorkSize(ownerClass, methodName, executionConfig.globalWorkSize(), arguments);
+    }
+
+    private static Object invokeLauncherMethod(Class<?> ownerClass, String methodName, String launcherMethodName, Object... arguments) {
         try {
             Class<?> launcherClass = Class.forName(GpuLauncherNaming.launcherClassName(ownerClass, methodName), true, ownerClass.getClassLoader());
             Method invokeMethod = Arrays.stream(launcherClass.getMethods())
-                    .filter(method -> method.getName().equals("invoke"))
+                    .filter(method -> method.getName().equals(launcherMethodName))
                     .filter(method -> Modifier.isStatic(method.getModifiers()))
                     .filter(method -> parametersMatch(method.getParameterTypes(), arguments))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException(
-                            "No generated GPU launcher invoke(...) overload matches "
+                            "No generated GPU launcher " + launcherMethodName + "(...) overload matches "
                                     + ownerClass.getName()
                                     + "#"
                                     + methodName
@@ -37,7 +52,7 @@ public final class GpuGeneratedLauncherInvoker {
             );
         } catch (IllegalAccessException exception) {
             throw new IllegalStateException(
-                    "Generated GPU launcher invoke(...) is not accessible for "
+                    "Generated GPU launcher " + launcherMethodName + "(...) is not accessible for "
                             + ownerClass.getName()
                             + "#"
                             + methodName,
@@ -52,7 +67,7 @@ public final class GpuGeneratedLauncherInvoker {
                 throw error;
             }
             throw new RuntimeException(
-                    "Generated GPU launcher invocation failed for "
+                    "Generated GPU launcher " + launcherMethodName + "(...) invocation failed for "
                             + ownerClass.getName()
                             + "#"
                             + methodName,
